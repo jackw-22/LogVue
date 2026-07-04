@@ -1,5 +1,8 @@
-import { app, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import type { AppInfo, IpcApi } from '@shared/types/ipc'
+import { getSettings, saveSettings } from '../config/settings'
+import * as archive from '../services/archive/ArchiveService'
+import { readNotes, writeNotes } from '../services/archive/SessionStore'
 
 /** Every channel in the contract must have exactly one handler here. */
 type Handlers = {
@@ -9,15 +12,36 @@ type Handlers = {
 }
 
 const handlers: Handlers = {
+  // ── app ──
   'app:ping': async (msg) => `pong: ${msg}`,
-
   'app:getInfo': async (): Promise<AppInfo> => ({
     appVersion: app.getVersion(),
     electron: process.versions.electron,
     chrome: process.versions.chrome,
     node: process.versions.node,
     platform: process.platform
-  })
+  }),
+
+  // ── settings / archive root ──
+  'settings:get': async () => getSettings(),
+  'settings:pickArchiveRoot': async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? undefined
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Choose FTC log archive folder',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  },
+  'settings:setArchiveRoot': async (path) => saveSettings({ archiveRoot: path }),
+
+  // ── archive / sessions ──
+  'archive:tree': async () => archive.scanTree(getSettings().archiveRoot ?? ''),
+  'archive:getSession': async (path) => archive.getSession(path),
+  'archive:createSession': async (input) => archive.createSession(input),
+  'archive:updateMeta': async (path, patch) => archive.updateMeta(path, patch),
+  'archive:promoteFolder': async (path) => archive.promoteFolder(path),
+  'archive:readNotes': async (path) => readNotes(path),
+  'archive:writeNotes': async (path, md) => writeNotes(path, md)
 }
 
 /** Wire every contract channel to its handler. Call once on app ready. */

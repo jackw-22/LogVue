@@ -1,0 +1,107 @@
+import type { SessionType } from '../constants/sessionTypes'
+import type { FileKind } from '../constants/fileKinds'
+
+export type { SessionType, FileKind }
+
+/** A file that lives inside a session folder (spec §4.1 / §5.2). */
+export interface SessionFile {
+  filename: string
+  kind: FileKind
+  source: string // e.g. 'control_hub' | 'manual' | 'usb_camera'
+  imported_at: string
+  remote_path?: string | null
+  original_filename?: string | null
+  file_size_bytes?: number | null
+  // Future media-sync fields (spec §17) are preserved via passthrough.
+  [extra: string]: unknown
+}
+
+/** FTCScout-owned event block (spec §5.1). */
+export interface EventInfo {
+  source?: string
+  season?: number
+  display_code?: string
+  ftcscout_code?: string
+  name?: string
+  last_synced?: string
+  has_matches?: boolean
+  [extra: string]: unknown
+}
+
+/** FTCScout-owned match block (spec §5.2). */
+export interface MatchInfo {
+  source?: string
+  label?: string
+  type?: string
+  number?: number
+  alliance?: 'red' | 'blue' | string
+  station?: string
+  team_number?: number
+  [extra: string]: unknown
+}
+
+/** General/workshop block (spec §5.4). */
+export interface GeneralInfo {
+  date?: string
+  location?: string
+  robot?: string
+  [extra: string]: unknown
+}
+
+/** The full contents of a `session.json` (spec §4). */
+export interface SessionMetadata {
+  schema_version: number
+  session_id: string
+  session_type: SessionType
+  display_name: string
+  created_at: string
+  updated_at: string
+  session_start?: string | null
+  session_end?: string | null
+  sort_key?: string | null
+  tags: string[]
+  notes_file: string
+  files: SessionFile[]
+  event?: EventInfo
+  match?: MatchInfo
+  session?: GeneralInfo
+  teams?: number[]
+  // Unknown top-level keys are preserved on round-trip.
+  [extra: string]: unknown
+}
+
+/** A resolved session (metadata + where it lives on disk). */
+export interface Session {
+  path: string // absolute folder path
+  name: string // folder name
+  metadata: SessionMetadata
+  hasSessionJson: boolean // false ⇒ metadata is discovery defaults, not yet written
+}
+
+/**
+ * A node in the session tree served to the renderer. Lightweight and derived
+ * (rebuildable) — counts come from disk, not bookkeeping.
+ */
+export interface SessionNode {
+  path: string
+  name: string
+  displayName: string
+  sessionType: SessionType
+  hasSessionJson: boolean
+  fileCount: number
+  logCount: number
+  tags: string[]
+  sortKey: string | null
+  children: SessionNode[]
+}
+
+/** Input for creating a new session folder. */
+export interface CreateSessionInput {
+  parentPath: string // absolute path of the parent folder (archive root or a session)
+  displayName: string
+  sessionType: SessionType
+}
+
+export interface AppSettings {
+  archiveRoot: string | null
+}

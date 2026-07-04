@@ -396,4 +396,28 @@ Adopting the spec's recommended defaults, encoded as constants/behaviour:
 - Import-only: never delete/rename on the Control Hub.
 
 Anything here can be revisited, but the code assumes these until changed.
-```
+
+### 10.1 Container folders vs sessions (design note — not yet built)
+
+Bare folders (no `session.json`) currently render with an **"unrecognised"** badge,
+which wrongly implies they're an incomplete state needing promotion. But some folders
+— year groupings like `2026/`, or organisational buckets — are legitimately *just
+folders*, never sessions. UX feedback: don't treat these as errors.
+
+Plan: a bare folder is a neutral **container** by default, and the tree offers two
+explicit actions instead of nagging:
+- **Recognise as session** → writes `session.json` (current `promoteFolder`).
+- **Keep as folder** → marks it a container so it stops being offered as a session
+  and renders as a plain group (no session chrome, excluded from session filters/counts).
+
+Open question — where the container marker lives, weighed against invariant #6
+(portability):
+- `session_type: 'container'` sentinel in a minimal `session.json` → travels with a
+  copied archive, visible on disk. *(Leaning this way.)*
+- Index/settings-only flag → keeps plain folders truly plain, but the intent doesn't
+  survive a copy and must be rebuildable/re-guessed.
+
+Heuristic default worth considering: a folder with only subfolders and no loose files
+is almost certainly a container, so it could default to container presentation without
+any marker, and only prompt "Recognise as session?" once a log lands in it. Revisit
+when building the tree's right-click actions (≈ Phase 4).
