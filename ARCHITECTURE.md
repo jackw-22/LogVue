@@ -88,7 +88,7 @@ LogVue/
         channels.ts            # channel name constants
       services/
         adb/
-          AdbClient.ts         # device detection, ls/find discovery, pull (Phase 3)
+          AdbClient.ts         # device detection, ls/find discovery, pull
           parseLs.ts           # tolerant `ls -l` / `find` parsing
           rlogFilename.ts      # opmode + timestamp parsing
           hublogs.ts           # assemble HubLog[] + resolve import status vs index
@@ -103,8 +103,9 @@ LogVue/
           rebuild.ts           # pure disk→rows projection + full rebuild
           indexService.ts      # owns the open store per archive root; cold-start/rebuild
         import/
-          ImportService.ts     # pull → copy → session.json → index
+          ImportService.ts     # pull → copy → session.json → index (+ new-session batch)
           identity.ts          # duplicate detection (§14)
+          fileKind.ts          # guess FileKind from filename (§6)
         ftcscout/
           FtcScoutClient.ts    # GraphQL queries
           syncEvent.ts         # merge remote matches → local sessions
@@ -278,18 +279,25 @@ separate `main → renderer` emitter so the UI reacts live without polling.
 ```
 renderer: user clicks "Import latest" on Q4 Blue B2
   → api.import.toSession({ remote_path, sessionPath, kind })
-main ImportService:
-  1. identity check (§14): remote_path+filename+size vs index
-        └─ if match → return { conflict } → renderer shows dialog (Cancel /
-           Import copy / Link existing / Reassign)
-  2. adb pull <remote_path> → <sessionPath>/<original_filename>   (append)
+main ImportService.importToSession:
+  1. identity check (§14): remote_path+filename+size vs index (skipped when force)
+        └─ if match → return { status:'duplicate', existing } → renderer offers
+           Cancel / Import another copy (force). [Link existing / Reassign: deferred]
+  2. adb pull <remote_path> → <sessionPath>/<original_filename>   (append;
+     collisions get a _2 suffix — uniqueFilePath). A bare target folder is promoted
+     to a session first, so an import always lands in something recognised.
   3. SessionStore: add SessionFile to session.json, bump updated_at
-  4. IndexStore: upsert file row + import-status
-  5. return ImportResult → Query invalidates 'archive:getSession' + 'adb:listHubLogs'
+  4. indexService.reindexSession: upsert the session row + replace its file rows,
+     so the hub-log status flips without a full rescan
+  5. return ImportResult → Query invalidates 'archive:tree' + 'archive:session' + 'adb:hubLogs'
 renderer: hub log row flips to "Imported → APOC26 / Q4 Blue B2"
 ```
 
-Never renames/deletes the remote file (spec §7.4, §22). Import **appends**.
+Never renames/deletes the remote file (spec §7.4, §22). Import **appends** (§4).
+`import:toNewSession` composes createSession + a forced import loop for the general
+"Create session from selected" workflow (§10). Ignored logs (§15) live in
+`ignored_hublogs` (index-only) via `adb:ignoreHubLog`/`adb:unignoreHubLog`; the UI
+hides them behind a "Show ignored" toggle.
 
 ### 6.2 Cold start / open archive (spec §13)
 

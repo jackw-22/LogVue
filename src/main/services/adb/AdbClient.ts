@@ -29,10 +29,10 @@ export interface RemoteFile {
  */
 export class AdbClient {
   /** Run a raw `adb` invocation. Maps a missing binary to {@link AdbNotFoundError}. */
-  private async run(args: string[]): Promise<string> {
+  private async run(args: string[], timeout = 15_000): Promise<string> {
     try {
       const { stdout } = await execFileAsync('adb', args, {
-        timeout: 15_000,
+        timeout,
         maxBuffer: 8 * 1024 * 1024,
         windowsHide: true
       })
@@ -92,6 +92,15 @@ export class AdbClient {
       }))
     }
     return this.findFallback()
+  }
+
+  /**
+   * `adb pull <remote> <destPath>` — copy a remote log to a local path (spec §7.4).
+   * Import-only: this never touches the remote file. A longer timeout than the
+   * read-only commands, since a log can be sizable.
+   */
+  async pull(remotePath: string, destPath: string): Promise<void> {
+    await this.run(['pull', remotePath, destPath], 120_000)
   }
 
   private async findFallback(): Promise<RemoteFile[]> {

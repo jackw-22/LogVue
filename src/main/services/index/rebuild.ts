@@ -35,7 +35,7 @@ export interface IndexRows {
 }
 
 /** Flatten a session's metadata into the row the `sessions` table stores. */
-function toSessionRow(path: string, m: SessionMetadata): SessionRow {
+export function toSessionRow(path: string, m: SessionMetadata): SessionRow {
   return {
     session_id: m.session_id,
     path,
@@ -50,7 +50,7 @@ function toSessionRow(path: string, m: SessionMetadata): SessionRow {
   }
 }
 
-function toFileRows(sessionId: string, m: SessionMetadata): FileRow[] {
+export function toFileRows(sessionId: string, m: SessionMetadata): FileRow[] {
   return m.files.map((f) => ({
     session_id: sessionId,
     filename: f.filename,

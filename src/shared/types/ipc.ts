@@ -17,6 +17,13 @@ import type {
   SessionNode
 } from './session'
 import type { AdbStatus, HubLog } from './hublog'
+import type {
+  HubLogRef,
+  ImportRequest,
+  ImportResult,
+  NewSessionImportRequest,
+  NewSessionImportResult
+} from './import'
 
 export interface AppInfo {
   appVersion: string
@@ -56,6 +63,16 @@ export interface IpcApi {
   'adb:status': () => Promise<AdbStatus>
   /** List `.rlog` files on the hub with parsed metadata + import status (spec §7.2–7.3). */
   'adb:listHubLogs': () => Promise<HubLog[]>
+  /** Mark a remote hub log as ignored — hidden from the default view (spec §15). */
+  'adb:ignoreHubLog': (entry: HubLogRef) => Promise<void>
+  /** Reverse an ignore (spec §15). */
+  'adb:unignoreHubLog': (remotePath: string) => Promise<void>
+
+  // ── import (pull → copy → append → index; spec §7.4, §14) ──
+  /** Import a remote log into an existing session. `duplicate` when already imported. */
+  'import:toSession': (req: ImportRequest) => Promise<ImportResult>
+  /** Create a session from selected logs, then import them into it (spec §10). */
+  'import:toNewSession': (req: NewSessionImportRequest) => Promise<NewSessionImportResult>
 }
 
 export type IpcChannel = keyof IpcApi

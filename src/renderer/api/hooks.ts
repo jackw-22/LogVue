@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { CreateSessionInput, SessionMetadata } from '@shared/types/session'
+import type {
+  HubLogRef,
+  ImportRequest,
+  NewSessionImportRequest
+} from '@shared/types/import'
 import { api } from './client'
 
 const keys = {
@@ -108,4 +113,53 @@ export function useAdbStatus() {
 /** List of hub `.rlog` files with import status. Only runs while `enabled` (device view + connected). */
 export function useHubLogs(enabled: boolean) {
   return useQuery({ queryKey: keys.hubLogs, queryFn: api.adb.listHubLogs, enabled })
+}
+
+/**
+ * After an import the hub-log statuses and the touched session change, so refresh
+ * the log list, the tree (file counts), and any open session view.
+ */
+function useImportRefresh() {
+  const qc = useQueryClient()
+  return () => {
+    qc.invalidateQueries({ queryKey: keys.hubLogs })
+    qc.invalidateQueries({ queryKey: keys.tree })
+    qc.invalidateQueries({ queryKey: ['archive', 'session'] })
+  }
+}
+
+/** Import a remote log into an existing session (spec §7.4). May resolve to a duplicate warning. */
+export function useImportToSession() {
+  const refresh = useImportRefresh()
+  return useMutation({
+    mutationFn: (req: ImportRequest) => api.import.toSession(req),
+    onSuccess: (res) => {
+      if (res.status === 'imported') refresh()
+    }
+  })
+}
+
+/** Create a session from selected logs and import them into it (spec §10). */
+export function useImportToNewSession() {
+  const refresh = useImportRefresh()
+  return useMutation({
+    mutationFn: (req: NewSessionImportRequest) => api.import.toNewSession(req),
+    onSuccess: () => refresh()
+  })
+}
+
+export function useIgnoreHubLog() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (entry: HubLogRef) => api.adb.ignoreHubLog(entry),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.hubLogs })
+  })
+}
+
+export function useUnignoreHubLog() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (remotePath: string) => api.adb.unignoreHubLog(remotePath),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.hubLogs })
+  })
 }

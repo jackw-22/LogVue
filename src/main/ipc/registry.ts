@@ -3,9 +3,10 @@ import type { AppInfo, IpcApi } from '@shared/types/ipc'
 import { getSettings, saveSettings } from '../config/settings'
 import * as archive from '../services/archive/ArchiveService'
 import { readNotes, writeNotes } from '../services/archive/SessionStore'
-import { ensureIndexBuilt, rebuild } from '../services/index/indexService'
+import { ensureIndexBuilt, getIndexStore, rebuild } from '../services/index/indexService'
 import { AdbClient } from '../services/adb/AdbClient'
 import { listHubLogs } from '../services/adb/hublogs'
+import { importToNewSession, importToSession } from '../services/import/ImportService'
 
 /** One adb wrapper for the app's lifetime (stateless; attaches to the shared adb server). */
 const adb = new AdbClient()
@@ -57,7 +58,17 @@ const handlers: Handlers = {
 
   // ── ADB / Control Hub ──
   'adb:status': async () => adb.getStatus(),
-  'adb:listHubLogs': async () => listHubLogs(adb, getSettings().archiveRoot)
+  'adb:listHubLogs': async () => listHubLogs(adb, getSettings().archiveRoot),
+  'adb:ignoreHubLog': async (entry) => {
+    getIndexStore(getSettings().archiveRoot)?.ignoreHubLog(entry)
+  },
+  'adb:unignoreHubLog': async (remotePath) => {
+    getIndexStore(getSettings().archiveRoot)?.unignoreHubLog(remotePath)
+  },
+
+  // ── import ──
+  'import:toSession': async (req) => importToSession(adb, getSettings().archiveRoot, req),
+  'import:toNewSession': async (req) => importToNewSession(adb, getSettings().archiveRoot, req)
 }
 
 /** Wire every contract channel to its handler. Call once on app ready. */

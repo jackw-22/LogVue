@@ -1,8 +1,29 @@
 import Database from 'better-sqlite3'
 import type { Database as Db } from 'better-sqlite3'
 import type { ImportStatus } from '@shared/types/hublog'
+import type { HubLogRef } from '@shared/types/import'
 import { DERIVED_TABLES, INDEX_SCHEMA_VERSION, SCHEMA_SQL } from './schema'
-import type { IndexRows } from './rebuild'
+import type { FileRow, IndexRows, SessionRow } from './rebuild'
+import type { ImportIdentity } from '../import/identity'
+
+/** Upsert a `sessions` row (used by both a full rebuild and a single-session reindex). */
+const INSERT_SESSION_SQL = `INSERT INTO sessions
+    (session_id, path, session_type, display_name, event_code, team_number,
+     alliance, session_start, sort_key, updated_at)
+   VALUES
+    (@session_id, @path, @session_type, @display_name, @event_code, @team_number,
+     @alliance, @session_start, @sort_key, @updated_at)
+   ON CONFLICT(session_id) DO UPDATE SET
+     path=excluded.path, session_type=excluded.session_type,
+     display_name=excluded.display_name, event_code=excluded.event_code,
+     team_number=excluded.team_number, alliance=excluded.alliance,
+     session_start=excluded.session_start, sort_key=excluded.sort_key,
+     updated_at=excluded.updated_at`
+
+const INSERT_FILE_SQL = `INSERT INTO files
+    (session_id, filename, kind, remote_path, original_filename, file_size_bytes, imported_at)
+   VALUES
+    (@session_id, @filename, @kind, @remote_path, @original_filename, @file_size_bytes, @imported_at)`
 
 /**
  * The local index (ARCHITECTURE.md §8) — the *only* module that touches the native
@@ -43,26 +64,8 @@ export class IndexStore {
    * Preserves `ignored_hublogs` and `ftcscout_cache`.
    */
   replaceSessions(rows: IndexRows): void {
-    const insertSession = this.db.prepare(
-      `INSERT INTO sessions
-        (session_id, path, session_type, display_name, event_code, team_number,
-         alliance, session_start, sort_key, updated_at)
-       VALUES
-        (@session_id, @path, @session_type, @display_name, @event_code, @team_number,
-         @alliance, @session_start, @sort_key, @updated_at)
-       ON CONFLICT(session_id) DO UPDATE SET
-         path=excluded.path, session_type=excluded.session_type,
-         display_name=excluded.display_name, event_code=excluded.event_code,
-         team_number=excluded.team_number, alliance=excluded.alliance,
-         session_start=excluded.session_start, sort_key=excluded.sort_key,
-         updated_at=excluded.updated_at`
-    )
-    const insertFile = this.db.prepare(
-      `INSERT INTO files
-        (session_id, filename, kind, remote_path, original_filename, file_size_bytes, imported_at)
-       VALUES
-        (@session_id, @filename, @kind, @remote_path, @original_filename, @file_size_bytes, @imported_at)`
-    )
+    const insertSession = this.db.prepare(INSERT_SESSION_SQL)
+    const insertFile = this.db.prepare(INSERT_FILE_SQL)
     const replace = this.db.transaction((data: IndexRows) => {
       this.db.exec('DELETE FROM files')
       this.db.exec('DELETE FROM sessions')
@@ -70,6 +73,62 @@ export class IndexStore {
       for (const f of data.files) insertFile.run(f)
     })
     replace(rows)
+  }
+
+  /**
+   * Re-index a single session after an import (spec §6.1 step 4): upsert its row and
+   * replace just that session's file rows, so a hub log's import status flips without
+   * a full rescan. The `files` change is bounded to one `session_id`.
+   */
+  indexSession(session: SessionRow, files: FileRow[]): void {
+    const insertSession = this.db.prepare(INSERT_SESSION_SQL)
+    const insertFile = this.db.prepare(INSERT_FILE_SQL)
+    const deleteFiles = this.db.prepare('DELETE FROM files WHERE session_id = ?')
+    const write = this.db.transaction(() => {
+      insertSession.run(session)
+      deleteFiles.run(session.session_id)
+      for (const f of files) insertFile.run(f)
+    })
+    write()
+  }
+
+  /**
+   * Existing imports of a remote file, with where each landed — the raw material for
+   * duplicate detection (spec §14). Matching on identity fields is done purely in
+   * `import/identity.findDuplicates`.
+   */
+  importsOf(remotePath: string): ImportIdentity[] {
+    return this.db
+      .prepare(
+        `SELECT f.remote_path, f.original_filename, f.file_size_bytes, f.filename,
+                s.path AS sessionPath, s.display_name AS sessionLabel
+           FROM files f JOIN sessions s ON s.session_id = f.session_id
+          WHERE f.remote_path = ?`
+      )
+      .all(remotePath) as ImportIdentity[]
+  }
+
+  /** Mark a remote hub log as ignored (spec §15) — hidden from the default log view. */
+  ignoreHubLog(entry: HubLogRef): void {
+    this.db
+      .prepare(
+        `INSERT INTO ignored_hublogs (remote_path, filename, file_size_bytes, ignored_at)
+         VALUES (@remote_path, @filename, @file_size_bytes, @ignored_at)
+         ON CONFLICT(remote_path) DO UPDATE SET
+           filename=excluded.filename, file_size_bytes=excluded.file_size_bytes,
+           ignored_at=excluded.ignored_at`
+      )
+      .run({
+        remote_path: entry.remotePath,
+        filename: entry.filename,
+        file_size_bytes: entry.fileSize,
+        ignored_at: new Date().toISOString()
+      })
+  }
+
+  /** Un-ignore a remote hub log (spec §15 — reversible). */
+  unignoreHubLog(remotePath: string): void {
+    this.db.prepare('DELETE FROM ignored_hublogs WHERE remote_path = ?').run(remotePath)
   }
 
   /**

@@ -1,5 +1,6 @@
 import '@shared/types/api' // registers the window.api global type
 import type { CreateSessionInput, SessionMetadata } from '@shared/types/session'
+import type { HubLogRef, ImportRequest, NewSessionImportRequest } from '@shared/types/import'
 
 /** Thin, typed wrappers over the preload bridge — one call site per channel. */
 export const api = {
@@ -22,6 +23,12 @@ export const api = {
   },
   adb: {
     status: () => window.api.invoke('adb:status'),
-    listHubLogs: () => window.api.invoke('adb:listHubLogs')
+    listHubLogs: () => window.api.invoke('adb:listHubLogs'),
+    ignoreHubLog: (entry: HubLogRef) => window.api.invoke('adb:ignoreHubLog', entry),
+    unignoreHubLog: (remotePath: string) => window.api.invoke('adb:unignoreHubLog', remotePath)
+  },
+  import: {
+    toSession: (req: ImportRequest) => window.api.invoke('import:toSession', req),
+    toNewSession: (req: NewSessionImportRequest) => window.api.invoke('import:toNewSession', req)
   }
 }

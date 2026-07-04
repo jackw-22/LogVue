@@ -87,7 +87,9 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
           Files <span className="muted small">({m.files.length})</span>
         </h3>
         {m.files.length === 0 ? (
-          <p className="muted small">No files imported yet. (ADB import arrives in Phase 2.)</p>
+          <p className="muted small">
+            No files yet. Import logs from the Control Hub tab, selecting this session as the target.
+          </p>
         ) : (
           <ul className="file-list">
             {m.files.map((f) => (

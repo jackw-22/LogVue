@@ -37,3 +37,22 @@ export function uniqueChildDir(parent: string, base: string): string {
   }
   return candidate
 }
+
+/**
+ * A non-colliding file path in `dir` for `filename`, disambiguating before the
+ * extension (`log.rlog` → `log_2.rlog`). Import keeps the original name (spec §22),
+ * so a re-imported copy into the same folder gets a suffix rather than overwriting.
+ */
+export function uniqueFilePath(dir: string, filename: string): string {
+  let candidate = join(dir, filename)
+  if (!existsSync(candidate)) return candidate
+  const dot = filename.lastIndexOf('.')
+  const stem = dot > 0 ? filename.slice(0, dot) : filename
+  const ext = dot > 0 ? filename.slice(dot) : ''
+  let n = 2
+  do {
+    candidate = join(dir, `${stem}_${n}${ext}`)
+    n += 1
+  } while (existsSync(candidate))
+  return candidate
+}

@@ -1,8 +1,9 @@
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { INDEX_FILE } from '../archive/paths'
+import { readMetadataOrDefault } from '../archive/SessionStore'
 import { IndexStore } from './IndexStore'
-import { rebuildIndex } from './rebuild'
+import { rebuildIndex, toFileRows, toSessionRow } from './rebuild'
 
 /**
  * Owns the single open `IndexStore` for the current archive root. The DB file lives
@@ -29,6 +30,17 @@ export function rebuild(root: string | null | undefined): { sessions: number; fi
   const store = getIndexStore(root)
   if (!store) return { sessions: 0, files: 0 }
   return rebuildIndex(store, root as string)
+}
+
+/**
+ * Re-index a single session from disk after an import (spec §6.1 step 4), so its hub
+ * logs flip to "imported" without a full rescan. No-op when no index is open.
+ */
+export function reindexSession(root: string | null | undefined, path: string): void {
+  const store = getIndexStore(root)
+  if (!store) return
+  const { metadata } = readMetadataOrDefault(path)
+  store.indexSession(toSessionRow(path, metadata), toFileRows(metadata.session_id, metadata))
 }
 
 /**
