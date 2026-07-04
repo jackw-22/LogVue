@@ -4,6 +4,11 @@ import { getSettings, saveSettings } from '../config/settings'
 import * as archive from '../services/archive/ArchiveService'
 import { readNotes, writeNotes } from '../services/archive/SessionStore'
 import { ensureIndexBuilt, rebuild } from '../services/index/indexService'
+import { AdbClient } from '../services/adb/AdbClient'
+import { listHubLogs } from '../services/adb/hublogs'
+
+/** One adb wrapper for the app's lifetime (stateless; attaches to the shared adb server). */
+const adb = new AdbClient()
 
 /** Every channel in the contract must have exactly one handler here. */
 type Handlers = {
@@ -48,7 +53,11 @@ const handlers: Handlers = {
   'archive:promoteFolder': async (path) => archive.promoteFolder(path),
   'archive:readNotes': async (path) => readNotes(path),
   'archive:writeNotes': async (path, md) => writeNotes(path, md),
-  'archive:rebuildIndex': async () => rebuild(getSettings().archiveRoot)
+  'archive:rebuildIndex': async () => rebuild(getSettings().archiveRoot),
+
+  // ── ADB / Control Hub ──
+  'adb:status': async () => adb.getStatus(),
+  'adb:listHubLogs': async () => listHubLogs(adb, getSettings().archiveRoot)
 }
 
 /** Wire every contract channel to its handler. Call once on app ready. */

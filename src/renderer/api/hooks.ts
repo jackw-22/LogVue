@@ -6,7 +6,9 @@ const keys = {
   settings: ['settings'] as const,
   tree: ['archive', 'tree'] as const,
   session: (path: string) => ['archive', 'session', path] as const,
-  notes: (path: string) => ['archive', 'notes', path] as const
+  notes: (path: string) => ['archive', 'notes', path] as const,
+  adbStatus: ['adb', 'status'] as const,
+  hubLogs: ['adb', 'hubLogs'] as const
 }
 
 export function useSettings() {
@@ -87,4 +89,23 @@ export function useWriteNotes(path: string) {
     mutationFn: (md: string) => api.archive.writeNotes(path, md),
     onSuccess: (_r, md) => qc.setQueryData(keys.notes(path), md)
   })
+}
+
+/**
+ * ADB connection status. Polled on an interval so plug/unplug transitions surface
+ * without a manual refresh (a pragmatic stand-in for the `adb:changed` push event;
+ * see ARCHITECTURE §5 — the push emitter is a later refinement).
+ */
+export function useAdbStatus() {
+  return useQuery({
+    queryKey: keys.adbStatus,
+    queryFn: api.adb.status,
+    refetchInterval: 4000,
+    refetchOnWindowFocus: true
+  })
+}
+
+/** List of hub `.rlog` files with import status. Only runs while `enabled` (device view + connected). */
+export function useHubLogs(enabled: boolean) {
+  return useQuery({ queryKey: keys.hubLogs, queryFn: api.adb.listHubLogs, enabled })
 }

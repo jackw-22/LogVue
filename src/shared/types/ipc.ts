@@ -16,6 +16,7 @@ import type {
   SessionMetadata,
   SessionNode
 } from './session'
+import type { AdbStatus, HubLog } from './hublog'
 
 export interface AppInfo {
   appVersion: string
@@ -49,6 +50,12 @@ export interface IpcApi {
   'archive:writeNotes': (path: string, md: string) => Promise<void>
   /** Rebuild the disposable sqlite index from a full disk rescan (spec §13). */
   'archive:rebuildIndex': () => Promise<{ sessions: number; files: number }>
+
+  // ── ADB / Control Hub (read-only; spec §7) ─────────────────
+  /** Connection status from `adb devices` (spec §7.1). */
+  'adb:status': () => Promise<AdbStatus>
+  /** List `.rlog` files on the hub with parsed metadata + import status (spec §7.2–7.3). */
+  'adb:listHubLogs': () => Promise<HubLog[]>
 }
 
 export type IpcChannel = keyof IpcApi

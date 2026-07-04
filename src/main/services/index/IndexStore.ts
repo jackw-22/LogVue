@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
 import type { Database as Db } from 'better-sqlite3'
+import type { ImportStatus } from '@shared/types/hublog'
 import { DERIVED_TABLES, INDEX_SCHEMA_VERSION, SCHEMA_SQL } from './schema'
 import type { IndexRows } from './rebuild'
 
@@ -69,6 +70,28 @@ export class IndexStore {
       for (const f of data.files) insertFile.run(f)
     })
     replace(rows)
+  }
+
+  /**
+   * Resolve a remote hub log's import status against the index (spec §7.3): whether
+   * it's already been imported into a session, or the user has hidden it. "Imported"
+   * wins over "ignored" — an actually-present file is the stronger fact.
+   */
+  importStatusFor(remotePath: string): ImportStatus {
+    const imported = this.db
+      .prepare(
+        `SELECT s.path AS path, s.display_name AS label
+           FROM files f JOIN sessions s ON s.session_id = f.session_id
+          WHERE f.remote_path = ? LIMIT 1`
+      )
+      .get(remotePath) as { path: string; label: string } | undefined
+    if (imported) {
+      return { state: 'imported', sessionPath: imported.path, sessionLabel: imported.label }
+    }
+    const ignored = this.db
+      .prepare('SELECT 1 FROM ignored_hublogs WHERE remote_path = ? LIMIT 1')
+      .get(remotePath)
+    return ignored ? { state: 'ignored' } : { state: 'not_imported' }
   }
 
   /** Row counts for the derived tables (what `archive:rebuildIndex` reports back). */

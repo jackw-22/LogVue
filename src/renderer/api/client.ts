@@ -17,6 +17,11 @@ export const api = {
       window.api.invoke('archive:updateMeta', path, patch),
     promoteFolder: (path: string) => window.api.invoke('archive:promoteFolder', path),
     readNotes: (path: string) => window.api.invoke('archive:readNotes', path),
-    writeNotes: (path: string, md: string) => window.api.invoke('archive:writeNotes', path, md)
+    writeNotes: (path: string, md: string) => window.api.invoke('archive:writeNotes', path, md),
+    rebuildIndex: () => window.api.invoke('archive:rebuildIndex')
+  },
+  adb: {
+    status: () => window.api.invoke('adb:status'),
+    listHubLogs: () => window.api.invoke('adb:listHubLogs')
   }
 }
