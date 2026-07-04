@@ -27,6 +27,12 @@ which defines *what* to build; this defines *how*.
 > The spec suggested Python/PySide6; we deliberately chose Electron/React for the
 > web UI and cross-platform packaging. Every spec *concept* still maps 1:1 (below).
 
+> **Native module (`better-sqlite3`)**: it has an ABI-specific binary. `npm install`
+> fetches the Node-ABI build (what Vitest uses), so **run `npm run rebuild` after any
+> install** to rebuild it for Electron's ABI before `npm run dev`. The native module is
+> isolated to `index/IndexStore.ts` and tests only exercise the pure `collectIndexRows`
+> path, so the two ABIs never conflict.
+
 ---
 
 ## 2. Process model
@@ -82,9 +88,10 @@ LogVue/
         channels.ts            # channel name constants
       services/
         adb/
-          AdbClient.ts         # device detection, ls, pull
+          AdbClient.ts         # device detection, ls/find discovery, pull (Phase 3)
           parseLs.ts           # tolerant `ls -l` / `find` parsing
           rlogFilename.ts      # opmode + timestamp parsing
+          hublogs.ts           # assemble HubLog[] + resolve import status vs index
         archive/
           ArchiveService.ts    # scan / create / read / write sessions
           SessionStore.ts      # session.json + notes.md read/write
@@ -232,7 +239,7 @@ interface Api {
   'settings:setArchiveRoot': (path: string) => AppSettings;
 
   // ── ADB ──────────────────────────────────────────────────
-  'adb:status':      () => { connected: boolean; device?: string };
+  'adb:status':      () => { connected: boolean; device?: string; adbMissing?: boolean };
   'adb:listHubLogs': () => HubLog[];                    // ls + parse + status
 
   // ── archive / sessions ───────────────────────────────────
@@ -346,7 +353,7 @@ empty `Q4_Blue_B2/` is already a valid, importable session before a single log e
 
 ---
 
-## 8. Index schema (rebuildable — `index/schema.sql`)
+## 8. Index schema (rebuildable — `index/schema.ts`)
 
 ```sql
 sessions(session_id PK, path, session_type, display_name, event_code,
