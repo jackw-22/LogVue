@@ -47,6 +47,8 @@ export interface IpcApi {
   'archive:promoteFolder': (path: string) => Promise<Session>
   'archive:readNotes': (path: string) => Promise<string>
   'archive:writeNotes': (path: string, md: string) => Promise<void>
+  /** Rebuild the disposable sqlite index from a full disk rescan (spec §13). */
+  'archive:rebuildIndex': () => Promise<{ sessions: number; files: number }>
 }
 
 export type IpcChannel = keyof IpcApi

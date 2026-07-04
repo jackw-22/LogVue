@@ -1,6 +1,8 @@
 import { join } from 'path'
 import { app, BrowserWindow, shell } from 'electron'
 import { registerIpcHandlers } from './ipc/registry'
+import { getSettings } from './config/settings'
+import { closeIndex, ensureIndexBuilt } from './services/index/indexService'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -42,6 +44,14 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerIpcHandlers()
+  // Cold start (§6.2): open the index for the saved archive root and build it if
+  // empty/stale, before the renderer asks for anything. The index is disposable,
+  // so a failure here (e.g. a locked/corrupt file) must not block the UI.
+  try {
+    ensureIndexBuilt(getSettings().archiveRoot)
+  } catch (err) {
+    console.error('Index build on startup failed (will run without index):', err)
+  }
   createWindow()
 
   app.on('activate', () => {
@@ -52,3 +62,5 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
+app.on('will-quit', () => closeIndex())

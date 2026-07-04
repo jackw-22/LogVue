@@ -91,9 +91,10 @@ LogVue/
           discovery.ts         # folders without session.json → sessions
           paths.ts             # archive root, safe folder naming
         index/
-          IndexStore.ts        # better-sqlite3 open/migrate/query
-          schema.sql           # index tables (rebuildable)
-          rebuild.ts           # full rescan → index
+          IndexStore.ts        # better-sqlite3 open/migrate/query (only native-module file)
+          schema.ts            # index DDL as a string const (rebuildable; ships in the bundle)
+          rebuild.ts           # pure disk→rows projection + full rebuild
+          indexService.ts      # owns the open store per archive root; cold-start/rebuild
         import/
           ImportService.ts     # pull → copy → session.json → index
           identity.ts          # duplicate detection (§14)

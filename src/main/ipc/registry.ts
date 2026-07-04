@@ -3,6 +3,7 @@ import type { AppInfo, IpcApi } from '@shared/types/ipc'
 import { getSettings, saveSettings } from '../config/settings'
 import * as archive from '../services/archive/ArchiveService'
 import { readNotes, writeNotes } from '../services/archive/SessionStore'
+import { ensureIndexBuilt, rebuild } from '../services/index/indexService'
 
 /** Every channel in the contract must have exactly one handler here. */
 type Handlers = {
@@ -32,7 +33,12 @@ const handlers: Handlers = {
     })
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
   },
-  'settings:setArchiveRoot': async (path) => saveSettings({ archiveRoot: path }),
+  'settings:setArchiveRoot': async (path) => {
+    const next = saveSettings({ archiveRoot: path })
+    // A new root gets a fresh index built from its contents (§6.2).
+    ensureIndexBuilt(next.archiveRoot)
+    return next
+  },
 
   // ── archive / sessions ──
   'archive:tree': async () => archive.scanTree(getSettings().archiveRoot ?? ''),
@@ -41,7 +47,8 @@ const handlers: Handlers = {
   'archive:updateMeta': async (path, patch) => archive.updateMeta(path, patch),
   'archive:promoteFolder': async (path) => archive.promoteFolder(path),
   'archive:readNotes': async (path) => readNotes(path),
-  'archive:writeNotes': async (path, md) => writeNotes(path, md)
+  'archive:writeNotes': async (path, md) => writeNotes(path, md),
+  'archive:rebuildIndex': async () => rebuild(getSettings().archiveRoot)
 }
 
 /** Wire every contract channel to its handler. Call once on app ready. */
