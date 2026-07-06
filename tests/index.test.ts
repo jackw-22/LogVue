@@ -81,7 +81,18 @@ describe('collectIndexRows', () => {
     expect(bare.session_id).toBeTruthy() // generated, disposable
   })
 
+  it('projects deduped, trimmed tags into (session, tag) rows', () => {
+    writeSession(join(root, 'Tuning'), {
+      session_id: 'tag-1',
+      session_type: 'tuning_session',
+      display_name: 'Shooter tuning',
+      tags: ['shooter', ' shooter ', 'vision', '  ']
+    })
+    const tags = collectIndexRows(root).tags.filter((t) => t.session_id === 'tag-1')
+    expect(tags.map((t) => t.tag).sort()).toEqual(['shooter', 'vision'])
+  })
+
   it('returns empty rows for a missing root', () => {
-    expect(collectIndexRows(join(root, 'nope'))).toEqual({ sessions: [], files: [] })
+    expect(collectIndexRows(join(root, 'nope'))).toEqual({ sessions: [], files: [], tags: [] })
   })
 })

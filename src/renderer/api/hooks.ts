@@ -5,6 +5,7 @@ import type {
   ImportRequest,
   NewSessionImportRequest
 } from '@shared/types/import'
+import type { SessionQuery } from '@shared/types/query'
 import { api } from './client'
 
 const keys = {
@@ -13,7 +14,8 @@ const keys = {
   session: (path: string) => ['archive', 'session', path] as const,
   notes: (path: string) => ['archive', 'notes', path] as const,
   adbStatus: ['adb', 'status'] as const,
-  hubLogs: ['adb', 'hubLogs'] as const
+  hubLogs: ['adb', 'hubLogs'] as const,
+  query: (q: SessionQuery) => ['index', 'query', q] as const
 }
 
 export function useSettings() {
@@ -37,6 +39,20 @@ export function useNotes(path: string | null) {
     queryKey: keys.notes(path ?? ''),
     queryFn: () => api.archive.readNotes(path as string),
     enabled: !!path
+  })
+}
+
+/**
+ * Filter/search the session index (spec §12). `keepPreviousData` keeps the last
+ * results on screen while a refined query is in flight, so the list doesn't flash
+ * empty on each keystroke/toggle.
+ */
+export function useSessionQuery(query: SessionQuery, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.query(query),
+    queryFn: () => api.index.query(query),
+    enabled,
+    placeholderData: (prev) => prev
   })
 }
 

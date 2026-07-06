@@ -1,6 +1,7 @@
 import '@shared/types/api' // registers the window.api global type
 import type { CreateSessionInput, SessionMetadata } from '@shared/types/session'
 import type { HubLogRef, ImportRequest, NewSessionImportRequest } from '@shared/types/import'
+import type { SessionQuery } from '@shared/types/query'
 
 /** Thin, typed wrappers over the preload bridge — one call site per channel. */
 export const api = {
@@ -20,6 +21,9 @@ export const api = {
     readNotes: (path: string) => window.api.invoke('archive:readNotes', path),
     writeNotes: (path: string, md: string) => window.api.invoke('archive:writeNotes', path, md),
     rebuildIndex: () => window.api.invoke('archive:rebuildIndex')
+  },
+  index: {
+    query: (query: SessionQuery) => window.api.invoke('index:query', query)
   },
   adb: {
     status: () => window.api.invoke('adb:status'),

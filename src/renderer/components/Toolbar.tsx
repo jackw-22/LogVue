@@ -46,11 +46,19 @@ export default function Toolbar({ settings, onNewTopLevel }: Props): JSX.Element
         >
           Control Hub
         </button>
+        <button
+          className={`tab ${view === 'search' ? 'active' : ''}`}
+          role="tab"
+          aria-selected={view === 'search'}
+          onClick={() => setView('search')}
+        >
+          Search
+        </button>
       </div>
 
       <div className="spacer" />
 
-      {view === 'archive' ? (
+      {view === 'archive' && (
         <>
           <button
             className="ghost sm"
@@ -62,7 +70,8 @@ export default function Toolbar({ settings, onNewTopLevel }: Props): JSX.Element
             + New session
           </button>
         </>
-      ) : (
+      )}
+      {view === 'device' && (
         <button className="ghost sm" onClick={() => qc.invalidateQueries({ queryKey: ['adb', 'hubLogs'] })}>
           Refresh logs
         </button>

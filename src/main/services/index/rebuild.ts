@@ -29,9 +29,16 @@ export interface FileRow {
   imported_at: string | null
 }
 
+/** One row of the `session_tags` table — a (session, tag) membership for "tagged X" filters. */
+export interface TagRow {
+  session_id: string
+  tag: string
+}
+
 export interface IndexRows {
   sessions: SessionRow[]
   files: FileRow[]
+  tags: TagRow[]
 }
 
 /** Flatten a session's metadata into the row the `sessions` table stores. */
@@ -62,10 +69,24 @@ export function toFileRows(sessionId: string, m: SessionMetadata): FileRow[] {
   }))
 }
 
+/** Deduped, blank-stripped (session, tag) rows for the tags table. */
+export function toTagRows(sessionId: string, m: SessionMetadata): TagRow[] {
+  const seen = new Set<string>()
+  const rows: TagRow[] = []
+  for (const raw of m.tags ?? []) {
+    const tag = raw.trim()
+    if (!tag || seen.has(tag)) continue
+    seen.add(tag)
+    rows.push({ session_id: sessionId, tag })
+  }
+  return rows
+}
+
 function walk(dir: string, out: IndexRows): void {
   const { metadata } = readMetadataOrDefault(dir)
   out.sessions.push(toSessionRow(dir, metadata))
   out.files.push(...toFileRows(metadata.session_id, metadata))
+  out.tags.push(...toTagRows(metadata.session_id, metadata))
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) walk(join(dir, entry.name), out)
   }
@@ -78,7 +99,7 @@ function walk(dir: string, out: IndexRows): void {
  * and flattens it into `sessions`/`files` rows.
  */
 export function collectIndexRows(root: string): IndexRows {
-  const out: IndexRows = { sessions: [], files: [] }
+  const out: IndexRows = { sessions: [], files: [], tags: [] }
   if (!root || !existsSync(root)) return out
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     if (entry.isDirectory()) walk(join(root, entry.name), out)

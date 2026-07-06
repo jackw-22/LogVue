@@ -3,7 +3,13 @@ import type { AppInfo, IpcApi } from '@shared/types/ipc'
 import { getSettings, saveSettings } from '../config/settings'
 import * as archive from '../services/archive/ArchiveService'
 import { readNotes, writeNotes } from '../services/archive/SessionStore'
-import { ensureIndexBuilt, getIndexStore, rebuild } from '../services/index/indexService'
+import {
+  ensureIndexBuilt,
+  getIndexStore,
+  querySessions,
+  rebuild,
+  reindexSession
+} from '../services/index/indexService'
 import { AdbClient } from '../services/adb/AdbClient'
 import { listHubLogs } from '../services/adb/hublogs'
 import { importToNewSession, importToSession } from '../services/import/ImportService'
@@ -49,12 +55,26 @@ const handlers: Handlers = {
   // ── archive / sessions ──
   'archive:tree': async () => archive.scanTree(getSettings().archiveRoot ?? ''),
   'archive:getSession': async (path) => archive.getSession(path),
-  'archive:createSession': async (input) => archive.createSession(input),
-  'archive:updateMeta': async (path, patch) => archive.updateMeta(path, patch),
-  'archive:promoteFolder': async (path) => archive.promoteFolder(path),
+  'archive:createSession': async (input) => {
+    const session = archive.createSession(input)
+    reindexSession(getSettings().archiveRoot, session.path)
+    return session
+  },
+  'archive:updateMeta': async (path, patch) => {
+    const session = archive.updateMeta(path, patch)
+    // Keep the index in step so type/tag/name edits are reflected in filters (spec §12).
+    reindexSession(getSettings().archiveRoot, path)
+    return session
+  },
+  'archive:promoteFolder': async (path) => {
+    const session = archive.promoteFolder(path)
+    reindexSession(getSettings().archiveRoot, path)
+    return session
+  },
   'archive:readNotes': async (path) => readNotes(path),
   'archive:writeNotes': async (path, md) => writeNotes(path, md),
   'archive:rebuildIndex': async () => rebuild(getSettings().archiveRoot),
+  'index:query': async (query) => querySessions(getSettings().archiveRoot, query),
 
   // ── ADB / Control Hub ──
   'adb:status': async () => adb.getStatus(),

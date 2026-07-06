@@ -2,8 +2,9 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { INDEX_FILE } from '../archive/paths'
 import { readMetadataOrDefault } from '../archive/SessionStore'
+import type { SessionQuery, SessionQueryResult } from '@shared/types/query'
 import { IndexStore } from './IndexStore'
-import { rebuildIndex, toFileRows, toSessionRow } from './rebuild'
+import { rebuildIndex, toFileRows, toSessionRow, toTagRows } from './rebuild'
 
 /**
  * Owns the single open `IndexStore` for the current archive root. The DB file lives
@@ -40,7 +41,30 @@ export function reindexSession(root: string | null | undefined, path: string): v
   const store = getIndexStore(root)
   if (!store) return
   const { metadata } = readMetadataOrDefault(path)
-  store.indexSession(toSessionRow(path, metadata), toFileRows(metadata.session_id, metadata))
+  store.indexSession(
+    toSessionRow(path, metadata),
+    toFileRows(metadata.session_id, metadata),
+    toTagRows(metadata.session_id, metadata)
+  )
+}
+
+/**
+ * Run a structured filter/search over the index (spec §12). Returns matching rows
+ * plus the whole-archive facet counts for the filter controls. When no index is open
+ * (no root) returns an empty result rather than throwing.
+ */
+export function querySessions(
+  root: string | null | undefined,
+  query: SessionQuery
+): SessionQueryResult {
+  const store = getIndexStore(root)
+  if (!store) return { rows: [], total: 0, facets: emptyFacets() }
+  const rows = store.querySessions(query)
+  return { rows, total: rows.length, facets: store.facets() }
+}
+
+function emptyFacets(): SessionQueryResult['facets'] {
+  return { sessionTypes: [], events: [], teams: [], alliances: [], kinds: [], tags: [] }
 }
 
 /**

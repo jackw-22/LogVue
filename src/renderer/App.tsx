@@ -5,6 +5,7 @@ import Toolbar from './components/Toolbar'
 import SessionTree from './components/SessionTree'
 import SessionDetails from './components/SessionDetails'
 import HubLogTable from './components/HubLogTable'
+import SearchView from './components/SearchView'
 import EmptyState from './components/EmptyState'
 import NewSessionDialog from './components/NewSessionDialog'
 
@@ -29,6 +30,10 @@ export default function App(): JSX.Element {
       {view === 'device' ? (
         <main className="pane detail-pane">
           <HubLogTable />
+        </main>
+      ) : view === 'search' ? (
+        <main className="pane detail-pane">
+          <SearchView />
         </main>
       ) : (
         <div className="panes">

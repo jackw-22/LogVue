@@ -253,6 +253,9 @@ interface Api {
   'archive:discoverBare':() => BareFolder[];            // folders w/o session.json
   'archive:rebuildIndex':() => { sessions: number; files: number };
 
+  // ── filter / search over the index (§12) ─────────────────
+  'index:query':         (q: SessionQuery) => SessionQueryResult; // rows + whole-archive facets
+
   // ── import ───────────────────────────────────────────────
   'import:toSession':    (req: ImportRequest) => ImportResult;   // append, not replace
   'import:resolveConflict':(req: ConflictResolution) => ImportResult; // §14
@@ -368,13 +371,21 @@ sessions(session_id PK, path, session_type, display_name, event_code,
          team_number, alliance, session_start, sort_key, updated_at);
 files(id PK, session_id FK, filename, kind, remote_path, original_filename,
       file_size_bytes, imported_at);
+session_tags(session_id FK, tag, PK(session_id, tag));   -- derived; "tagged X" join
 ignored_hublogs(remote_path PK, filename, file_size_bytes, ignored_at);
 ftcscout_cache(event_code, season, payload_json, last_synced);
 ```
 
 Everything here is derivable from disk. Filters (spec §12) become indexed queries
 (`session_type`, `event_code`, `alliance`, tag join, "has file kind", "missing
-teleop"). Search examples in §12.2 are all expressible over these tables.
+teleop"). Search examples in §12.2 are all expressible over these tables. The pure
+`index/query.ts` (`buildSessionQuery`) turns a `SessionQuery` into a fully
+parametrised WHERE body; `IndexStore.querySessions`/`facets` execute it and the
+whole-archive facet counts. `session_tags` is a *derived* table (rebuilt from disk
+alongside `sessions`/`files`), so `INDEX_SCHEMA_VERSION` is bumped to **2** — a stale
+index drops and repopulates the derived tables on next open (§6.2). Metadata edits
+(`updateMeta`/`createSession`/`promoteFolder`) reindex the single touched session so
+filters stay in step without a full rescan.
 
 ---
 

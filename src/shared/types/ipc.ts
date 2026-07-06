@@ -17,6 +17,7 @@ import type {
   SessionNode
 } from './session'
 import type { AdbStatus, HubLog } from './hublog'
+import type { SessionQuery, SessionQueryResult } from './query'
 import type {
   HubLogRef,
   ImportRequest,
@@ -57,6 +58,8 @@ export interface IpcApi {
   'archive:writeNotes': (path: string, md: string) => Promise<void>
   /** Rebuild the disposable sqlite index from a full disk rescan (spec §13). */
   'archive:rebuildIndex': () => Promise<{ sessions: number; files: number }>
+  /** Filter/search sessions via the index; returns matches + whole-archive facets (spec §12). */
+  'index:query': (query: SessionQuery) => Promise<SessionQueryResult>
 
   // ── ADB / Control Hub (read-only; spec §7) ─────────────────
   /** Connection status from `adb devices` (spec §7.1). */
