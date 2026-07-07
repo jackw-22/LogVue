@@ -443,6 +443,44 @@ section h3 {
   margin-top: 0.5rem;
 }
 
+/* ── match info / match list ──────────────────────────────── */
+.match-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.6rem 1rem;
+}
+.match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+.match-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+}
+.match-row:hover {
+  background: var(--panel-2);
+  border-color: var(--accent);
+}
+.match-code {
+  font-weight: 600;
+  min-width: 3.5rem;
+}
+.match-station {
+  color: var(--muted);
+  flex: 1;
+}
+.match-logs {
+  white-space: nowrap;
+}
+
 /* ── empty state ──────────────────────────────────────────── */
 .empty-state {
   display: grid;

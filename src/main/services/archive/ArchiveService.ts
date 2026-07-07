@@ -49,6 +49,7 @@ function scanNode(dir: string): SessionNode {
     logCount: hasSessionJson && metaLogCount > 0 ? metaLogCount : logCount,
     tags: metadata.tags,
     sortKey: metadata.sort_key ?? metadata.session_start ?? null,
+    match: metadata.match ?? null,
     children
   }
 }

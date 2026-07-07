@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { SESSION_TYPES, SESSION_TYPE_LABELS } from '@shared/constants/sessionTypes'
 import { FILE_KIND_LABELS } from '@shared/constants/fileKinds'
+import { isMatchType } from '@shared/constants/matchTypes'
 import type { FileKind, SessionType } from '@shared/types/session'
 import { useNotes, usePromoteFolder, useSession, useUpdateMeta, useWriteNotes } from '../api/hooks'
+import MatchInfoEditor from './MatchInfoEditor'
+import MatchList from './MatchList'
 
 interface Props {
   path: string
@@ -82,6 +85,12 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
         </label>
       </div>
 
+      {isMatchType(m.session_type) && <MatchInfoEditor path={path} match={m.match} />}
+
+      {m.session_type === 'competition_event' && (
+        <MatchList eventPath={path} onCreateChild={onNewChild} />
+      )}
+
       <section>
         <h3>
           Files <span className="muted small">({m.files.length})</span>
@@ -121,11 +130,13 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
         </div>
       </section>
 
-      <section>
-        <button className="ghost sm" onClick={onNewChild}>
-          + New child session
-        </button>
-      </section>
+      {m.session_type !== 'competition_event' && (
+        <section>
+          <button className="ghost sm" onClick={onNewChild}>
+            + New child session
+          </button>
+        </section>
+      )}
     </div>
   )
 }

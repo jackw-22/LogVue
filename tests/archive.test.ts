@@ -31,19 +31,26 @@ describe('scanTree', () => {
     const apoc = join(root, '2026', 'APOC26')
     writeSession(apoc, { schema_version: 1, session_type: 'competition_event', display_name: 'APOC26' })
     const q4 = join(apoc, 'Q4_Blue_B2')
-    writeSession(q4, { schema_version: 1, session_type: 'official_match', display_name: 'Q4 Blue B2' })
+    writeSession(q4, {
+      schema_version: 1,
+      session_type: 'official_match',
+      display_name: 'Q4 Blue B2',
+      match: { label: 'Q4', alliance: 'blue', station: 'B2', team_number: 12345 }
+    })
     writeFileSync(join(q4, 'AutoOpMode_log_1.rlog'), 'x')
     writeFileSync(join(q4, 'TeleOp_log_2.rlog'), 'x')
 
     const tree = scanTree(root)
     const year = tree.find((n) => n.name === '2026')!
     expect(year.hasSessionJson).toBe(false) // bare grouping folder
+    expect(year.match).toBeNull() // grouping folder carries no match block
     const event = year.children[0]
     expect(event.displayName).toBe('APOC26')
     expect(event.sessionType).toBe('competition_event')
     const match = event.children[0]
     expect(match.displayName).toBe('Q4 Blue B2')
     expect(match.logCount).toBe(2)
+    expect(match.match).toMatchObject({ alliance: 'blue', station: 'B2', team_number: 12345 })
   })
 
   it('returns [] for a missing root', () => {

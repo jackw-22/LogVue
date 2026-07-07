@@ -92,6 +92,8 @@ export interface SessionNode {
   logCount: number
   tags: string[]
   sortKey: string | null
+  /** Match summary (present only for match-type sessions), so the match list can render without refetching. */
+  match?: MatchInfo | null
   children: SessionNode[]
 }
 
