@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SESSION_TYPES, SESSION_TYPE_LABELS } from '@shared/constants/sessionTypes'
+import { SELECTABLE_SESSION_TYPES, SESSION_TYPE_LABELS } from '@shared/constants/sessionTypes'
 import type { SessionType } from '@shared/types/session'
 import { useCreateSession } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
@@ -43,7 +43,7 @@ export default function NewSessionDialog({ parentPath, parentLabel, onClose }: P
         <label>
           Type
           <select value={type} onChange={(e) => setType(e.target.value as SessionType)}>
-            {SESSION_TYPES.map((t) => (
+            {SELECTABLE_SESSION_TYPES.map((t) => (
               <option key={t} value={t}>
                 {SESSION_TYPE_LABELS[t]}
               </option>

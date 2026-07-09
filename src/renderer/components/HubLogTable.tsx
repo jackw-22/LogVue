@@ -1,14 +1,30 @@
 import { useMemo, useState } from 'react'
 import { ADB_NOT_FOUND_HINT } from '@shared/constants/adb'
+import { formatBytes } from '@shared/format/bytes'
+import type { SessionNode } from '@shared/types/session'
 import type { HubLog, ImportStatus } from '@shared/types/hublog'
 import {
   useAdbStatus,
+  useArchiveTree,
   useHubLogs,
   useIgnoreHubLog,
+  useImportToNewSession,
+  useImportToSession,
   useSettings,
   useUnignoreHubLog
 } from '../api/hooks'
+import { useAppStore } from '../stores/appStore'
+import { guessAlliance } from '../lib/alliance'
+import { formatTimestamp } from '../lib/time'
 import ImportDialog from './ImportDialog'
+
+/** Local YYYY-MM-DD, the name of the date-based session quick import targets. */
+function todayKey(): string {
+  const d = new Date()
+  const mo = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mo}-${day}`
+}
 
 /** Control Hub view: the remote `.rlog` files, with selection + import/ignore actions (spec §10). */
 export default function HubLogTable(): JSX.Element {
@@ -16,6 +32,7 @@ export default function HubLogTable(): JSX.Element {
   const { data: adb } = useAdbStatus()
   const connected = !!adb?.connected
   const { data: logs, isLoading, isError, error } = useHubLogs(connected)
+  const { data: tree } = useArchiveTree(true)
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showIgnored, setShowIgnored] = useState(false)
@@ -23,6 +40,9 @@ export default function HubLogTable(): JSX.Element {
 
   const ignore = useIgnoreHubLog()
   const unignore = useUnignoreHubLog()
+  const importOne = useImportToSession()
+  const importNew = useImportToNewSession()
+  const shade = useAppStore((s) => s.shade)
 
   // By default hide ignored logs (spec §15); keep selection in sync with what's shown.
   const visible = useMemo(
@@ -50,6 +70,7 @@ export default function HubLogTable(): JSX.Element {
 
   const selectedLogs = visible.filter((l) => selected.has(l.remote_path))
   const allShownSelected = visible.length > 0 && visible.every((l) => selected.has(l.remote_path))
+  const importing = importOne.isPending || importNew.isPending
 
   function toggle(path: string) {
     setSelected((prev) => {
@@ -66,6 +87,36 @@ export default function HubLogTable(): JSX.Element {
     if (target.length > 0) setDialog({ logs: target, mode })
   }
 
+  /**
+   * Quick import (prototype §hub): drop logs straight into today's date-based
+   * session at the archive root, creating it on first use, no dialog.
+   */
+  async function quickImport(target: HubLog[]) {
+    if (target.length === 0 || !settings?.archiveRoot || importing) return
+    const key = todayKey()
+    const existing = (tree ?? []).find(
+      (n: SessionNode) => n.displayName === key || n.name === key
+    )
+    const refs = target.map((l) => ({
+      remotePath: l.remote_path,
+      filename: l.filename,
+      fileSize: l.file_size_bytes
+    }))
+    if (existing) {
+      for (const ref of refs) {
+        await importOne.mutateAsync({ ...ref, sessionPath: existing.path, force: false })
+      }
+    } else {
+      await importNew.mutateAsync({
+        parentPath: settings.archiveRoot,
+        displayName: key,
+        sessionType: 'general_session',
+        logs: refs
+      })
+    }
+    setSelected(new Set())
+  }
+
   return (
     <div className="hublogs">
       <div className="hublogs-head">
@@ -75,17 +126,25 @@ export default function HubLogTable(): JSX.Element {
         <div className="hublogs-actions">
           <button
             className="sm"
-            disabled={selectedLogs.length === 0}
+            disabled={selectedLogs.length === 0 || importing}
             onClick={() => openDialog(selectedLogs, 'existing')}
           >
             Import selected…
           </button>
           <button
+            className="quick-btn sm"
+            disabled={selectedLogs.length === 0 || importing}
+            onClick={() => quickImport(selectedLogs)}
+            title="Import straight into today's date-based session"
+          >
+            {importing ? 'Importing…' : `Quick import → ${todayKey()}`}
+          </button>
+          <button
             className="ghost sm"
-            disabled={selectedLogs.length === 0}
+            disabled={selectedLogs.length === 0 || importing}
             onClick={() => openDialog(selectedLogs, 'new')}
           >
-            New session from selected…
+            New session…
           </button>
           {ignoredCount > 0 && (
             <label className="show-ignored small">
@@ -120,9 +179,11 @@ export default function HubLogTable(): JSX.Element {
               <Row
                 key={log.remote_path}
                 log={log}
+                tint={shade === 'tint'}
                 checked={selected.has(log.remote_path)}
                 onToggle={() => toggle(log.remote_path)}
                 onImport={() => openDialog([log], 'existing')}
+                onQuickImport={() => quickImport([log])}
                 onIgnore={() =>
                   ignore.mutate({
                     remotePath: log.remote_path,
@@ -152,21 +213,38 @@ export default function HubLogTable(): JSX.Element {
 
 interface RowProps {
   log: HubLog
+  tint: boolean
   checked: boolean
   onToggle: () => void
   onImport: () => void
+  onQuickImport: () => void
   onIgnore: () => void
   onUnignore: () => void
 }
 
-function Row({ log, checked, onToggle, onImport, onIgnore, onUnignore }: RowProps): JSX.Element {
+function Row({
+  log,
+  tint,
+  checked,
+  onToggle,
+  onImport,
+  onQuickImport,
+  onIgnore,
+  onUnignore
+}: RowProps): JSX.Element {
   const ignored = log.import_status.state === 'ignored'
+  const colour = guessAlliance(log.opmode, log.filename)
   return (
-    <tr className={ignored ? 'is-ignored' : undefined}>
-      <td className="pick">
+    <tr className={`${ignored ? 'is-ignored' : ''}${tint ? ` tint-${colour}` : ''}`}>
+      <td className={`pick striped ${colour}`}>
         <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Select ${log.filename}`} />
       </td>
-      <td>{log.opmode ?? <span className="muted">—</span>}</td>
+      <td>
+        <span className="opmode-cell">
+          <span className={`dot ${colour}`} />
+          {log.opmode ?? <span className="muted">—</span>}
+        </span>
+      </td>
       <td className="mono">{formatTimestamp(log.parsed_timestamp)}</td>
       <td className="num mono">{formatBytes(log.file_size_bytes)}</td>
       <td>
@@ -178,6 +256,13 @@ function Row({ log, checked, onToggle, onImport, onIgnore, onUnignore }: RowProp
       <td className="row-actions">
         <button className="link-btn" onClick={onImport}>
           Import
+        </button>
+        <button
+          className="link-btn quick"
+          onClick={onQuickImport}
+          title="Import straight into today's date-based session"
+        >
+          Quick import
         </button>
         {ignored ? (
           <button className="link-btn muted" onClick={onUnignore}>
@@ -216,18 +301,4 @@ function Notice({ title, children }: { title: string; children: React.ReactNode 
       </div>
     </div>
   )
-}
-
-/** `2026-07-04T11:50:05.104` → `2026-07-04 11:50:05` (drop millis for readability). */
-function formatTimestamp(ts: string | null): string {
-  if (!ts) return '—'
-  return ts.replace('T', ' ').replace(/\.\d+$/, '')
-}
-
-function formatBytes(bytes: number | null): string {
-  if (bytes == null) return '—'
-  if (bytes < 1024) return `${bytes} B`
-  const kb = bytes / 1024
-  if (kb < 1024) return `${kb.toFixed(1)} KB`
-  return `${(kb / 1024).toFixed(1)} MB`
 }

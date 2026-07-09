@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   createSession,
   getSession,
+  listFolderFiles,
   promoteFolder,
   scanTree,
   updateMeta
@@ -55,6 +56,44 @@ describe('scanTree', () => {
 
   it('returns [] for a missing root', () => {
     expect(scanTree(join(root, 'nope'))).toEqual([])
+  })
+})
+
+describe('listFolderFiles', () => {
+  it('lists loose files with guessed kinds, skipping plumbing', () => {
+    const dir = join(root, 'Unsorted_Dump')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'AutoOpMode_log_1.rlog'), 'x')
+    writeFileSync(join(dir, 'TeleOp_log_2.rlog'), 'xy')
+    writeFileSync(join(dir, 'notes.md'), '# hi') // plumbing → skipped
+    writeFileSync(join(dir, 'session.json'), '{}') // plumbing → skipped
+
+    const files = listFolderFiles(dir)
+    expect(files.map((f) => f.filename)).toEqual(['AutoOpMode_log_1.rlog', 'TeleOp_log_2.rlog'])
+    expect(files[0]).toMatchObject({ kind: 'auto_log', sizeBytes: 1, tracked: false })
+    expect(files[1]).toMatchObject({ kind: 'teleop_log', sizeBytes: 2, tracked: false })
+  })
+
+  it('marks files present in session.json as tracked and uses their curated kind', () => {
+    const dir = join(root, 'Q4_Blue_B2')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'DriveTest_log_9.rlog'), 'x')
+    writeFileSync(
+      join(dir, 'session.json'),
+      JSON.stringify({
+        schema_version: 1,
+        session_type: 'official_match',
+        display_name: 'Q4',
+        files: [{ filename: 'DriveTest_log_9.rlog', kind: 'tuning_log', source: 'control_hub' }]
+      })
+    )
+    const files = listFolderFiles(dir)
+    expect(files).toHaveLength(1)
+    expect(files[0]).toMatchObject({ kind: 'tuning_log', tracked: true })
+  })
+
+  it('returns [] for a missing folder', () => {
+    expect(listFolderFiles(join(root, 'nope'))).toEqual([])
   })
 })
 

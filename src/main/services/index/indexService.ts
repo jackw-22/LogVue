@@ -2,7 +2,9 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { INDEX_FILE } from '../archive/paths'
 import { readMetadataOrDefault } from '../archive/SessionStore'
-import type { SessionQuery, SessionQueryResult } from '@shared/types/query'
+import type { LogQueryRow, SessionQuery, SessionQueryResult } from '@shared/types/query'
+import type { FileKind, SessionType } from '@shared/types/session'
+import { parseRlogFilename } from '../adb/rlogFilename'
 import { IndexStore } from './IndexStore'
 import { rebuildIndex, toFileRows, toSessionRow, toTagRows } from './rebuild'
 
@@ -61,6 +63,37 @@ export function querySessions(
   if (!store) return { rows: [], total: 0, facets: emptyFacets() }
   const rows = store.querySessions(query)
   return { rows, total: rows.length, facets: store.facets() }
+}
+
+/**
+ * Log-level filter/search for the "All logs" dashboard (quick-find): every imported
+ * log matching the session-level query, hydrated with an op-mode and recorded
+ * timestamp parsed from its filename (imported_at as fallback), newest-first.
+ */
+export function queryLogs(root: string | null | undefined, query: SessionQuery): LogQueryRow[] {
+  const store = getIndexStore(root)
+  if (!store) return []
+  const rows = store.queryLogs(query).map((r): LogQueryRow => {
+    const { opmode, parsed_timestamp } = parseRlogFilename(r.filename)
+    return {
+      sessionPath: r.path,
+      sessionLabel: r.display_name,
+      sessionType: r.session_type as SessionType,
+      alliance: r.alliance,
+      filename: r.filename,
+      kind: r.kind as FileKind,
+      opmode,
+      sizeBytes: r.file_size_bytes,
+      recorded: parsed_timestamp ?? r.imported_at
+    }
+  })
+  // Newest first; rows without any timestamp sink to the end.
+  return rows.sort((a, b) => {
+    if (a.recorded && b.recorded) return a.recorded < b.recorded ? 1 : a.recorded > b.recorded ? -1 : 0
+    if (a.recorded) return -1
+    if (b.recorded) return 1
+    return a.filename.localeCompare(b.filename)
+  })
 }
 
 function emptyFacets(): SessionQueryResult['facets'] {

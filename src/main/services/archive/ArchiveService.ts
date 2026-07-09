@@ -1,14 +1,16 @@
 import { basename, join } from 'path'
-import { existsSync, mkdirSync, readdirSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, statSync } from 'fs'
 import { LOG_KINDS } from '@shared/constants/fileKinds'
 import { makeDefaultMetadata } from '@shared/schema/sessionJson'
 import type {
   CreateSessionInput,
+  FolderFile,
   Session,
   SessionMetadata,
   SessionNode
 } from '@shared/types/session'
 import { INDEX_FILE, NOTES_FILE, RESERVED_NAMES, toFolderName, uniqueChildDir } from './paths'
+import { guessFileKind } from '../import/fileKind'
 import { readMetadata, readMetadataOrDefault, writeMetadata, writeNotes } from './SessionStore'
 
 /** Count non-plumbing files in a folder, and how many look like logs. */
@@ -75,6 +77,38 @@ export function scanTree(root: string): SessionNode[] {
 function toSession(dir: string): Session {
   const { metadata, hasSessionJson } = readMetadataOrDefault(dir)
   return { path: dir, name: basename(dir), metadata, hasSessionJson }
+}
+
+/**
+ * The files physically present directly inside `dir` (not recursing into subfolders,
+ * skipping archive plumbing). Kind comes from `session.json` for tracked files, else is
+ * guessed from the name — so you can see the logs in a folder without importing them first.
+ */
+export function listFolderFiles(dir: string): FolderFile[] {
+  if (!existsSync(dir)) return []
+  const { metadata } = readMetadataOrDefault(dir)
+  const trackedKind = new Map(metadata.files.map((f) => [f.filename, f.kind]))
+
+  const out: FolderFile[] = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isFile()) continue
+    const name = entry.name
+    if (RESERVED_NAMES.has(name) || name === NOTES_FILE || name === INDEX_FILE) continue
+    let sizeBytes: number | null = null
+    try {
+      sizeBytes = statSync(join(dir, name)).size
+    } catch {
+      sizeBytes = null
+    }
+    out.push({
+      filename: name,
+      kind: trackedKind.get(name) ?? guessFileKind(name),
+      sizeBytes,
+      tracked: trackedKind.has(name)
+    })
+  }
+  out.sort((a, b) => a.filename.localeCompare(b.filename))
+  return out
 }
 
 export function getSession(dir: string): Session {

@@ -50,6 +50,12 @@ describe('buildSessionQuery', () => {
     expect(params).toEqual({ tag0: 'localization', tag1: 'shooter' })
   })
 
+  it('models noAlliance as NULL-or-empty on the alliance column', () => {
+    const { where, params } = buildSessionQuery({ noAlliance: true })
+    expect(where).toBe(`(s.alliance IS NULL OR s.alliance = '')`)
+    expect(params).toEqual({})
+  })
+
   it('models has-kind as EXISTS and missing-kind as NOT EXISTS', () => {
     const has = buildSessionQuery({ hasKinds: ['auto_log'] })
     expect(has.where).toContain('EXISTS (SELECT 1 FROM files f')

@@ -57,6 +57,8 @@ export function buildSessionQuery(query: SessionQuery): BuiltQuery {
   const alliances = (query.alliances ?? []).filter(Boolean)
   if (alliances.length) clauses.push(inClause('s.alliance', alliances, 'alli', params))
 
+  if (query.noAlliance) clauses.push(`(s.alliance IS NULL OR s.alliance = '')`)
+
   // Tags: session must carry EVERY listed tag → one EXISTS per tag.
   const tags = (query.tags ?? []).map((t) => t.trim()).filter(Boolean)
   tags.forEach((tag, i) => {

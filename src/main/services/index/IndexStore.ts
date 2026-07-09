@@ -179,7 +179,7 @@ export class IndexStore {
         `SELECT session_id, path, session_type, display_name, event_code,
                 team_number, alliance, session_start, sort_key
            FROM sessions s
-          WHERE ${where}
+          WHERE (${where}) AND s.session_type <> 'container'
           ORDER BY (COALESCE(s.sort_key, s.session_start) IS NULL),
                    COALESCE(s.sort_key, s.session_start) DESC,
                    s.display_name COLLATE NOCASE`
@@ -217,6 +217,53 @@ export class IndexStore {
         tags: tags.get(r.session_id) ?? []
       }
     })
+  }
+
+  /**
+   * The imported log files matching a session-level filter, with their session
+   * context — the rows behind the "All logs" dashboard (quick-find). Free text is
+   * widened here to also match the *filename*, since the unit of result is a file.
+   * Timestamps are parsed from filenames by the caller; ordering happens there too.
+   */
+  queryLogs(query: SessionQuery): Array<{
+    filename: string
+    kind: string
+    file_size_bytes: number | null
+    imported_at: string | null
+    path: string
+    display_name: string
+    session_type: string
+    alliance: string | null
+  }> {
+    const { text, ...rest } = query
+    const { where, params } = buildSessionQuery(rest)
+    let textClause = '1'
+    const trimmed = text?.trim()
+    if (trimmed) {
+      params.ftext = `%${trimmed}%`
+      textClause =
+        `(s.display_name LIKE @ftext ESCAPE '\\'` +
+        ` OR s.event_code LIKE @ftext ESCAPE '\\'` +
+        ` OR f.filename LIKE @ftext ESCAPE '\\'` +
+        ` OR EXISTS (SELECT 1 FROM session_tags t WHERE t.session_id = s.session_id AND t.tag LIKE @ftext ESCAPE '\\'))`
+    }
+    return this.db
+      .prepare(
+        `SELECT f.filename, f.kind, f.file_size_bytes, f.imported_at,
+                s.path, s.display_name, s.session_type, s.alliance
+           FROM files f JOIN sessions s ON s.session_id = f.session_id
+          WHERE (${where}) AND ${textClause} AND s.session_type <> 'container'`
+      )
+      .all(params) as Array<{
+      filename: string
+      kind: string
+      file_size_bytes: number | null
+      imported_at: string | null
+      path: string
+      display_name: string
+      session_type: string
+      alliance: string | null
+    }>
   }
 
   /** Map of session_id → its file kinds (one entry per file), for the matched ids only. */
@@ -262,7 +309,9 @@ export class IndexStore {
 
     return {
       sessionTypes: groupCount(
+        // Containers are folders, not sessions — keep them out of the type filter (§10.1).
         `SELECT session_type AS value, COUNT(*) AS count FROM sessions
+          WHERE session_type <> 'container'
           GROUP BY session_type ORDER BY count DESC, value`
       ),
       events: groupCount(

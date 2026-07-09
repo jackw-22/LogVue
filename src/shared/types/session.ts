@@ -97,6 +97,15 @@ export interface SessionNode {
   children: SessionNode[]
 }
 
+/** A file physically present in a folder on disk (whether or not it's tracked in session.json). */
+export interface FolderFile {
+  filename: string
+  kind: FileKind
+  sizeBytes: number | null
+  /** True when the file is listed in the folder's `session.json` (imported/curated), not just loose on disk. */
+  tracked: boolean
+}
+
 /** Input for creating a new session folder. */
 export interface CreateSessionInput {
   parentPath: string // absolute path of the parent folder (archive root or a session)

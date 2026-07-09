@@ -46,14 +46,6 @@ export default function Toolbar({ settings, onNewTopLevel }: Props): JSX.Element
         >
           Control Hub
         </button>
-        <button
-          className={`tab ${view === 'search' ? 'active' : ''}`}
-          role="tab"
-          aria-selected={view === 'search'}
-          onClick={() => setView('search')}
-        >
-          Search
-        </button>
       </div>
 
       <div className="spacer" />

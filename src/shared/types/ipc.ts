@@ -12,12 +12,13 @@
 import type {
   AppSettings,
   CreateSessionInput,
+  FolderFile,
   Session,
   SessionMetadata,
   SessionNode
 } from './session'
 import type { AdbStatus, HubLog } from './hublog'
-import type { SessionQuery, SessionQueryResult } from './query'
+import type { LogQueryRow, SessionQuery, SessionQueryResult } from './query'
 import type {
   HubLogRef,
   ImportRequest,
@@ -50,6 +51,8 @@ export interface IpcApi {
   /** The session tree beneath the archive root. */
   'archive:tree': () => Promise<SessionNode[]>
   'archive:getSession': (path: string) => Promise<Session>
+  /** The files physically inside a folder/session on disk — lets you see logs without importing. */
+  'archive:listFiles': (path: string) => Promise<FolderFile[]>
   'archive:createSession': (input: CreateSessionInput) => Promise<Session>
   'archive:updateMeta': (path: string, patch: Partial<SessionMetadata>) => Promise<Session>
   /** Write a `session.json` for a bare folder using discovery defaults (spec §4.2). */
@@ -60,6 +63,8 @@ export interface IpcApi {
   'archive:rebuildIndex': () => Promise<{ sessions: number; files: number }>
   /** Filter/search sessions via the index; returns matches + whole-archive facets (spec §12). */
   'index:query': (query: SessionQuery) => Promise<SessionQueryResult>
+  /** Log-level filter/search — every imported log matching the query, newest-first (quick-find). */
+  'index:queryLogs': (query: SessionQuery) => Promise<LogQueryRow[]>
 
   // ── ADB / Control Hub (read-only; spec §7) ─────────────────
   /** Connection status from `adb devices` (spec §7.1). */

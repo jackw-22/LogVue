@@ -14,6 +14,7 @@ export const api = {
   archive: {
     tree: () => window.api.invoke('archive:tree'),
     getSession: (path: string) => window.api.invoke('archive:getSession', path),
+    listFiles: (path: string) => window.api.invoke('archive:listFiles', path),
     createSession: (input: CreateSessionInput) => window.api.invoke('archive:createSession', input),
     updateMeta: (path: string, patch: Partial<SessionMetadata>) =>
       window.api.invoke('archive:updateMeta', path, patch),
@@ -23,7 +24,8 @@ export const api = {
     rebuildIndex: () => window.api.invoke('archive:rebuildIndex')
   },
   index: {
-    query: (query: SessionQuery) => window.api.invoke('index:query', query)
+    query: (query: SessionQuery) => window.api.invoke('index:query', query),
+    queryLogs: (query: SessionQuery) => window.api.invoke('index:queryLogs', query)
   },
   adb: {
     status: () => window.api.invoke('adb:status'),

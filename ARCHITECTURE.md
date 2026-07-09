@@ -424,7 +424,7 @@ Adopting the spec's recommended defaults, encoded as constants/behaviour:
 
 Anything here can be revisited, but the code assumes these until changed.
 
-### 10.1 Container folders vs sessions (design note — not yet built)
+### 10.1 Container folders vs sessions (built — Phase 4c)
 
 Bare folders (no `session.json`) currently render with an **"unrecognised"** badge,
 which wrongly implies they're an incomplete state needing promotion. But some folders
@@ -437,14 +437,10 @@ explicit actions instead of nagging:
 - **Keep as folder** → marks it a container so it stops being offered as a session
   and renders as a plain group (no session chrome, excluded from session filters/counts).
 
-Open question — where the container marker lives, weighed against invariant #6
-(portability):
-- `session_type: 'container'` sentinel in a minimal `session.json` → travels with a
-  copied archive, visible on disk. *(Leaning this way.)*
-- Index/settings-only flag → keeps plain folders truly plain, but the intent doesn't
-  survive a copy and must be rebuildable/re-guessed.
-
-Heuristic default worth considering: a folder with only subfolders and no loose files
-is almost certainly a container, so it could default to container presentation without
-any marker, and only prompt "Recognise as session?" once a log lands in it. Revisit
-when building the tree's right-click actions (≈ Phase 4).
+Decided: the marker is a `session_type: 'container'` sentinel in a minimal
+`session.json` — it travels with a copied archive and is visible on disk (invariant #6).
+`container` is a valid `SessionType` but excluded from the type pickers
+(`SELECTABLE_SESSION_TYPES`) and from session search/facets. In the UI, containers and
+bare folders render as plain groups (no stripe/chrome, "folder" chip for explicit
+containers) and get a lightweight `FolderDetails` view offering **Recognise as session**
+(existing `promoteFolder` / `updateMeta`) or **Keep as folder** (writes the sentinel).

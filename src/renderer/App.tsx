@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useSettings } from './api/hooks'
 import { useAppStore } from './stores/appStore'
 import Toolbar from './components/Toolbar'
+import QuickFindBar from './components/QuickFindBar'
 import SessionTree from './components/SessionTree'
 import SessionDetails from './components/SessionDetails'
+import LogDashboard from './components/LogDashboard'
 import HubLogTable from './components/HubLogTable'
-import SearchView from './components/SearchView'
 import EmptyState from './components/EmptyState'
 import NewSessionDialog from './components/NewSessionDialog'
 
@@ -31,27 +32,26 @@ export default function App(): JSX.Element {
         <main className="pane detail-pane">
           <HubLogTable />
         </main>
-      ) : view === 'search' ? (
-        <main className="pane detail-pane">
-          <SearchView />
-        </main>
       ) : (
-        <div className="panes">
-          <aside className="pane tree-pane">
-            <SessionTree />
-          </aside>
+        <>
+          <QuickFindBar />
+          <div className="panes">
+            <aside className="pane tree-pane">
+              <SessionTree />
+            </aside>
 
-          <main className="pane detail-pane">
-            {selectedPath ? (
-              <SessionDetails
-                path={selectedPath}
-                onNewChild={() => setNewParent({ path: selectedPath, label: 'this session' })}
-              />
-            ) : (
-              <div className="details-empty">Select a session on the left, or create a new one.</div>
-            )}
-          </main>
-        </div>
+            <main className="pane detail-pane">
+              {selectedPath ? (
+                <SessionDetails
+                  path={selectedPath}
+                  onNewChild={() => setNewParent({ path: selectedPath, label: 'this session' })}
+                />
+              ) : (
+                <LogDashboard />
+              )}
+            </main>
+          </div>
+        </>
       )}
 
       {newParent && (

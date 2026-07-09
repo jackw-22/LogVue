@@ -12,10 +12,12 @@ const keys = {
   settings: ['settings'] as const,
   tree: ['archive', 'tree'] as const,
   session: (path: string) => ['archive', 'session', path] as const,
+  files: (path: string) => ['archive', 'files', path] as const,
   notes: (path: string) => ['archive', 'notes', path] as const,
   adbStatus: ['adb', 'status'] as const,
   hubLogs: ['adb', 'hubLogs'] as const,
-  query: (q: SessionQuery) => ['index', 'query', q] as const
+  query: (q: SessionQuery) => ['index', 'query', q] as const,
+  logQuery: (q: SessionQuery) => ['index', 'queryLogs', q] as const
 }
 
 export function useSettings() {
@@ -30,6 +32,15 @@ export function useSession(path: string | null) {
   return useQuery({
     queryKey: keys.session(path ?? ''),
     queryFn: () => api.archive.getSession(path as string),
+    enabled: !!path
+  })
+}
+
+/** The files physically inside a folder/session on disk (spec §16 — see logs without importing). */
+export function useFolderFiles(path: string | null) {
+  return useQuery({
+    queryKey: keys.files(path ?? ''),
+    queryFn: () => api.archive.listFiles(path as string),
     enabled: !!path
   })
 }
@@ -51,6 +62,19 @@ export function useSessionQuery(query: SessionQuery, enabled: boolean) {
   return useQuery({
     queryKey: keys.query(query),
     queryFn: () => api.index.query(query),
+    enabled,
+    placeholderData: (prev) => prev
+  })
+}
+
+/**
+ * Log-level filter/search for the "All logs" dashboard. Same keepPreviousData
+ * trick as {@link useSessionQuery} so rows don't flash away per keystroke.
+ */
+export function useLogQuery(query: SessionQuery, enabled = true) {
+  return useQuery({
+    queryKey: keys.logQuery(query),
+    queryFn: () => api.index.queryLogs(query),
     enabled,
     placeholderData: (prev) => prev
   })
@@ -78,7 +102,10 @@ export function useCreateSession() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: CreateSessionInput) => api.archive.createSession(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.tree })
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.tree })
+      qc.invalidateQueries({ queryKey: ['index'] })
+    }
   })
 }
 
@@ -89,6 +116,7 @@ export function useUpdateMeta(path: string) {
     onSuccess: (session) => {
       qc.setQueryData(keys.session(path), session)
       qc.invalidateQueries({ queryKey: keys.tree })
+      qc.invalidateQueries({ queryKey: ['index'] })
     }
   })
 }
@@ -141,6 +169,8 @@ function useImportRefresh() {
     qc.invalidateQueries({ queryKey: keys.hubLogs })
     qc.invalidateQueries({ queryKey: keys.tree })
     qc.invalidateQueries({ queryKey: ['archive', 'session'] })
+    qc.invalidateQueries({ queryKey: ['archive', 'files'] })
+    qc.invalidateQueries({ queryKey: ['index'] })
   }
 }
 

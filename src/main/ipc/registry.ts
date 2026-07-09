@@ -6,6 +6,7 @@ import { readNotes, writeNotes } from '../services/archive/SessionStore'
 import {
   ensureIndexBuilt,
   getIndexStore,
+  queryLogs,
   querySessions,
   rebuild,
   reindexSession
@@ -55,6 +56,7 @@ const handlers: Handlers = {
   // ── archive / sessions ──
   'archive:tree': async () => archive.scanTree(getSettings().archiveRoot ?? ''),
   'archive:getSession': async (path) => archive.getSession(path),
+  'archive:listFiles': async (path) => archive.listFolderFiles(path),
   'archive:createSession': async (input) => {
     const session = archive.createSession(input)
     reindexSession(getSettings().archiveRoot, session.path)
@@ -75,6 +77,7 @@ const handlers: Handlers = {
   'archive:writeNotes': async (path, md) => writeNotes(path, md),
   'archive:rebuildIndex': async () => rebuild(getSettings().archiveRoot),
   'index:query': async (query) => querySessions(getSettings().archiveRoot, query),
+  'index:queryLogs': async (query) => queryLogs(getSettings().archiveRoot, query),
 
   // ── ADB / Control Hub ──
   'adb:status': async () => adb.getStatus(),

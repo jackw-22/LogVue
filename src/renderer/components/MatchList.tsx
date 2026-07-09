@@ -4,20 +4,11 @@ import { isMatchType } from '@shared/constants/matchTypes'
 import { formatLogCount, formatMatchCode, formatMatchStation } from '@shared/format/match'
 import { useArchiveTree } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
+import { findNode } from '../lib/tree'
 
 interface Props {
   eventPath: string
   onCreateChild: () => void
-}
-
-/** Depth-first search for the node at `path` in the tree served to the renderer. */
-function findNode(nodes: SessionNode[], path: string): SessionNode | null {
-  for (const node of nodes) {
-    if (node.path === path) return node
-    const hit = findNode(node.children, path)
-    if (hit) return hit
-  }
-  return null
 }
 
 function MatchRow({ node }: { node: SessionNode }): JSX.Element {

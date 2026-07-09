@@ -13,6 +13,8 @@ export interface SessionQuery {
   events?: string[]
   teams?: number[]
   alliances?: string[]
+  /** Only sessions with no alliance at all (the quick-find "None" chip). */
+  noAlliance?: boolean
   /** Session must carry every one of these tags. */
   tags?: string[]
   /** Session must contain a file of every one of these kinds ("all official matches WITH a teleop log"). */
@@ -61,4 +63,22 @@ export interface SessionQueryResult {
   rows: SessionQueryRow[]
   total: number
   facets: FacetCounts
+}
+
+/**
+ * One imported log file with its session context — a row of the "All logs"
+ * dashboard (quick-find). Produced by `index:queryLogs`, newest-first.
+ */
+export interface LogQueryRow {
+  sessionPath: string
+  sessionLabel: string
+  sessionType: SessionType
+  alliance: string | null
+  filename: string
+  kind: FileKind
+  /** Op-mode parsed from the filename, or null if unrecognised. */
+  opmode: string | null
+  sizeBytes: number | null
+  /** When the log was recorded — parsed from the filename, falling back to imported_at. */
+  recorded: string | null
 }
