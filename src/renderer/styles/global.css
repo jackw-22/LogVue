@@ -213,6 +213,17 @@ input[type="checkbox"] {
 }
 
 /* ── view tabs (toolbar + dashboard mode switch) ──────────── */
+.source-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.source-switch .status {
+  border-radius: 999px;
+  padding: 0.16rem 0.5rem;
+  font-size: 0.72rem;
+  background: color-mix(in srgb, var(--panel-2) 70%, transparent);
+}
 .tabs {
   display: flex;
   gap: 0.2rem;
@@ -594,7 +605,14 @@ input[type="checkbox"] {
   white-space: nowrap;
 }
 .chip.count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   color: var(--text);
+}
+.chip-warning {
+  font-size: 0.7rem;
+  line-height: 1;
 }
 .chip.placeholder {
   border-style: dashed;
@@ -900,7 +918,7 @@ section h3 {
 .context-menu {
   position: fixed;
   z-index: 50;
-  min-width: 150px;
+  width: 210px;
   padding: 4px;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -908,8 +926,9 @@ section h3 {
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
 }
 .context-menu button {
+  display: block;
   width: 100%;
-  justify-content: flex-start;
+  text-align: left;
   background: transparent;
   border: none;
   color: var(--text);

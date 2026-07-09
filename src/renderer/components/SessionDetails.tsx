@@ -206,7 +206,7 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
             ))
           )}
         </div>
-        <button type="button" className="ghost sm" onClick={() => showFolder.mutate(path)}>
+        <button type="button" onClick={() => showFolder.mutate(path)}>
           Show folder
         </button>
       </div>
@@ -241,7 +241,11 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
                   key={f.filename}
                   onContextMenu={(e) => {
                     e.preventDefault()
-                    setFileMenu({ filename: f.filename, x: e.clientX, y: e.clientY })
+                    setFileMenu({
+                      filename: f.filename,
+                      x: Math.min(e.clientX, window.innerWidth - 220),
+                      y: e.clientY
+                    })
                   }}
                 >
                   <span className="kind-badge boxed">{kindBadge(f.kind)}</span>
@@ -296,15 +300,6 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
           style={{ left: fileMenu.x, top: fileMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            type="button"
-            onClick={() => {
-              openFile.mutate({ path, filename: fileMenu.filename })
-              setFileMenu(null)
-            }}
-          >
-            Open
-          </button>
           <button
             type="button"
             onClick={() => {

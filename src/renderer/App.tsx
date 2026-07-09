@@ -13,16 +13,46 @@ import EmptyState from './components/EmptyState'
 import NewSessionDialog from './components/NewSessionDialog'
 import SettingsDialog from './components/SettingsDialog'
 
+// Toggle to make typing anywhere jump to the Library search box (disabled: felt intrusive).
+const TYPE_TO_SEARCH = false
+
 export default function App(): JSX.Element {
   const { data: settings, isLoading } = useSettings()
   const { data: tree } = useArchiveTree(!!settings?.archiveRoot)
   const selectedPath = useAppStore((s) => s.selectedPath)
   const view = useAppStore((s) => s.view)
+  const setView = useAppStore((s) => s.setView)
+  const select = useAppStore((s) => s.select)
+  const search = useAppStore((s) => s.search)
+  const setSearch = useAppStore((s) => s.setSearch)
   const qc = useQueryClient()
 
   // When set, holds the parent folder we're creating a session under.
   const [newParent, setNewParent] = useState<{ path: string; label: string } | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+
+  // Typing anywhere outside an input jumps to the Library view's search/dashboard.
+  useEffect(() => {
+    if (!TYPE_TO_SEARCH) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return
+
+      e.preventDefault()
+      if (view !== 'archive') setView('archive')
+      if (selectedPath) select(null)
+      setSearch(search + e.key)
+      requestAnimationFrame(() => {
+        const input = document.getElementById('library-search-input') as HTMLInputElement | null
+        input?.focus()
+        input?.setSelectionRange(input.value.length, input.value.length)
+      })
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [view, selectedPath, search, setView, select, setSearch])
 
   useEffect(() => {
     return window.api.onArchiveChanged(() => {

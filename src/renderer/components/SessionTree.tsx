@@ -78,7 +78,13 @@ function TreeRow({
         <span className={`stripe ${isFolder ? 'none' : colour}`} />
         <span className={`tree-name${isFolder ? ' folder' : ''}`}>{node.displayName}</span>
         {(node.hasSessionJson || node.logCount > 0) && (
-          <span className="chip count">{formatLogCount(node.logCount)}</span>
+          <span
+            className={`chip count${isFolder ? ' bare' : ''}`}
+            title={isFolder ? 'Folder is not recognised as a session' : undefined}
+          >
+            {isFolder && <span className="chip-warning">⚠️</span>}
+            {formatLogCount(node.logCount)}
+          </span>
         )}
       </div>
       {!isCollapsed &&

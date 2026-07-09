@@ -42,23 +42,26 @@ export default function Toolbar({ settings, onNewTopLevel, onSettings }: Props):
         </button>
       </div>
 
-      <div className="tabs" role="tablist">
-        <button
-          className={`tab ${view === 'archive' ? 'active' : ''}`}
-          role="tab"
-          aria-selected={view === 'archive'}
-          onClick={() => setView('archive')}
-        >
-          Library
-        </button>
-        <button
-          className={`tab ${view === 'device' ? 'active' : ''}`}
-          role="tab"
-          aria-selected={view === 'device'}
-          onClick={() => setView('device')}
-        >
-          {sourceName}
-        </button>
+      <div className="source-switch">
+        <div className="tabs" role="tablist">
+          <button
+            className={`tab ${view === 'archive' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={view === 'archive'}
+            onClick={() => setView('archive')}
+          >
+            Library
+          </button>
+          <button
+            className={`tab ${view === 'device' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={view === 'device'}
+            onClick={() => setView('device')}
+          >
+            {sourceName}
+          </button>
+        </div>
+        <SourceBadge connected={sourceConnected} label={sourceLabel} sourceName={sourceName} />
       </div>
 
       <div className="spacer" />
@@ -86,17 +89,24 @@ export default function Toolbar({ settings, onNewTopLevel, onSettings }: Props):
         </button>
       )}
 
-      <AdbBadge
-        connected={sourceConnected}
-        label={sourceLabel}
-      />
     </header>
   )
 }
 
-function AdbBadge({ connected, label }: { connected: boolean; label: string }): JSX.Element {
+function SourceBadge({
+  connected,
+  label,
+  sourceName
+}: {
+  connected: boolean
+  label: string
+  sourceName: string
+}): JSX.Element {
   return (
-    <span className={`status ${connected ? 'ok' : 'off'}`} title={`ADB: ${connected ? 'connected' : 'disconnected'}`}>
+    <span
+      className={`status ${connected ? 'ok' : 'off'}`}
+      title={`${sourceName}: ${connected ? 'connected' : 'disconnected'}`}
+    >
       <span className="dot" /> {label}
     </span>
   )

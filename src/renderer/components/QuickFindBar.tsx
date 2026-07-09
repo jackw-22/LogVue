@@ -90,6 +90,7 @@ export default function QuickFindBar(): JSX.Element {
 
       <div className="quickfind-search">
         <input
+          id="library-search-input"
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
