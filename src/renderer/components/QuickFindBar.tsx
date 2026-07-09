@@ -1,8 +1,9 @@
 import type { AllianceFilter, ShadeMode, TypeFilter } from '../stores/appStore'
 import { useAppStore } from '../stores/appStore'
-import { useLogQuery } from '../api/hooks'
+import { useArchiveTree, useLogQuery } from '../api/hooks'
 import { allianceClass } from '../lib/alliance'
 import { formatRelative } from '../lib/time'
+import { findNode } from '../lib/tree'
 
 const ALLIANCE_CHIPS: { value: AllianceFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -41,7 +42,9 @@ export default function QuickFindBar(): JSX.Element {
 
   // Unfiltered query — the latest log across the whole archive.
   const { data: allLogs } = useLogQuery({})
+  const { data: tree } = useArchiveTree(true)
   const latest = allLogs?.[0]
+  const latestPath = latest ? (tree ? findNode(tree, latest.sessionPath)?.path ?? latest.sessionPath : latest.sessionPath) : null
 
   return (
     <div className="quickfind">
@@ -95,7 +98,7 @@ export default function QuickFindBar(): JSX.Element {
         {latest && (
           <button
             className="latest-btn"
-            onClick={() => openSession(latest.sessionPath)}
+            onClick={() => latestPath && openSession(latestPath)}
             title={latest.filename}
           >
             <span className={`dot ${allianceClass(latest.alliance)}`} />

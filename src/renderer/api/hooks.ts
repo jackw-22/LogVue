@@ -55,6 +55,19 @@ export function useShowFile() {
   })
 }
 
+export function useShowFolder() {
+  return useMutation({
+    mutationFn: (path: string) => api.archive.showFolder(path)
+  })
+}
+
+export function useOpenFile() {
+  return useMutation({
+    mutationFn: ({ path, filename }: { path: string; filename: string }) =>
+      api.archive.openFile(path, filename)
+  })
+}
+
 export function useNotes(path: string | null) {
   return useQuery({
     queryKey: keys.notes(path ?? ''),

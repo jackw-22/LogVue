@@ -69,8 +69,12 @@ export interface IpcApi {
   'archive:getSession': (path: string) => Promise<Session>
   /** The files physically inside a folder/session on disk — lets you see logs without importing. */
   'archive:listFiles': (path: string) => Promise<FolderFile[]>
+  /** Reveal a session folder in the OS file manager. */
+  'archive:showFolder': (path: string) => Promise<void>
   /** Reveal a session file in the OS file manager. */
   'archive:showFile': (path: string, filename: string) => Promise<void>
+  /** Open a session file with the operating system's registered handler. */
+  'archive:openFile': (path: string, filename: string) => Promise<void>
   'archive:createSession': (input: CreateSessionInput) => Promise<Session>
   'archive:updateMeta': (path: string, patch: Partial<SessionMetadata>) => Promise<Session>
   /** Write a `session.json` for a bare folder using discovery defaults (spec §4.2). */

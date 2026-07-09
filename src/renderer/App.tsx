@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useSettings } from './api/hooks'
+import { useArchiveTree, useSettings } from './api/hooks'
 import { useAppStore } from './stores/appStore'
+import { findNode } from './lib/tree'
 import Toolbar from './components/Toolbar'
 import QuickFindBar from './components/QuickFindBar'
 import SessionTree from './components/SessionTree'
@@ -14,6 +15,7 @@ import SettingsDialog from './components/SettingsDialog'
 
 export default function App(): JSX.Element {
   const { data: settings, isLoading } = useSettings()
+  const { data: tree } = useArchiveTree(!!settings?.archiveRoot)
   const selectedPath = useAppStore((s) => s.selectedPath)
   const view = useAppStore((s) => s.view)
   const qc = useQueryClient()
@@ -34,6 +36,9 @@ export default function App(): JSX.Element {
 
   if (isLoading) return <div className="boot">Starting LogVue…</div>
   if (!settings?.archiveRoot) return <EmptyState />
+
+  const selectedSessionPath =
+    selectedPath && tree ? findNode(tree, selectedPath)?.path ?? selectedPath : selectedPath
 
   return (
     <div className="shell">
@@ -56,10 +61,10 @@ export default function App(): JSX.Element {
             </aside>
 
             <main className="pane detail-pane">
-              {selectedPath ? (
+              {selectedSessionPath ? (
                 <SessionDetails
-                  path={selectedPath}
-                  onNewChild={() => setNewParent({ path: selectedPath, label: 'this session' })}
+                  path={selectedSessionPath}
+                  onNewChild={() => setNewParent({ path: selectedSessionPath, label: 'this session' })}
                 />
               ) : (
                 <LogDashboard />

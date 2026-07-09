@@ -22,7 +22,9 @@ export const api = {
     tree: () => window.api.invoke('archive:tree'),
     getSession: (path: string) => window.api.invoke('archive:getSession', path),
     listFiles: (path: string) => window.api.invoke('archive:listFiles', path),
+    showFolder: (path: string) => window.api.invoke('archive:showFolder', path),
     showFile: (path: string, filename: string) => window.api.invoke('archive:showFile', path, filename),
+    openFile: (path: string, filename: string) => window.api.invoke('archive:openFile', path, filename),
     createSession: (input: CreateSessionInput) => window.api.invoke('archive:createSession', input),
     updateMeta: (path: string, patch: Partial<SessionMetadata>) =>
       window.api.invoke('archive:updateMeta', path, patch),

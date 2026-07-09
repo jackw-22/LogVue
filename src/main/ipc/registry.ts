@@ -86,8 +86,16 @@ const handlers: Handlers = {
   'archive:tree': async () => archive.scanTree(getSettings().archiveRoot ?? ''),
   'archive:getSession': async (path) => archive.getSession(path),
   'archive:listFiles': async (path) => archive.listFolderFiles(path),
+  'archive:showFolder': async (path) => {
+    const error = await shell.openPath(path)
+    if (error) throw new Error(error)
+  },
   'archive:showFile': async (path, filename) => {
     shell.showItemInFolder(join(path, filename))
+  },
+  'archive:openFile': async (path, filename) => {
+    const error = await shell.openPath(join(path, filename))
+    if (error) throw new Error(error)
   },
   'archive:createSession': async (input) => {
     const session = archive.createSession(input)

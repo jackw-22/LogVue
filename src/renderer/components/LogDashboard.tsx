@@ -5,7 +5,7 @@ import { formatBytes } from '@shared/format/bytes'
 import { useArchiveTree, useLogQuery, useSettings } from '../api/hooks'
 import { toSessionQuery, useAppStore } from '../stores/appStore'
 import { allianceClass, kindBadge } from '../lib/alliance'
-import { buildPathLabels } from '../lib/tree'
+import { buildPathLabels, findNode, normalizePathKey } from '../lib/tree'
 import { formatRecentTimestamp, formatTimestamp } from '../lib/time'
 
 /**
@@ -34,8 +34,12 @@ export default function LogDashboard(): JSX.Element {
 
   /** "Group / Session" breadcrumb for a row (just the session name at top level). */
   function crumb(row: LogQueryRow): string {
-    const parent = labels.get(row.sessionPath)?.parentLabel
+    const parent = labels.get(normalizePathKey(row.sessionPath))?.parentLabel
     return parent ? `${parent} / ${row.sessionLabel}` : row.sessionLabel
+  }
+
+  function canonicalPath(path: string): string {
+    return tree ? findNode(tree, path)?.path ?? path : path
   }
 
   return (
@@ -70,9 +74,9 @@ export default function LogDashboard(): JSX.Element {
           {isLoading ? 'Loading…' : `No logs match. Import some from the ${sourceName} tab, or clear the filters.`}
         </div>
       ) : mode === 'flat' ? (
-        <FlatList logs={logs} crumb={crumb} />
+        <FlatList logs={logs} crumb={crumb} canonicalPath={canonicalPath} />
       ) : (
-        <GroupedList logs={logs} crumb={crumb} />
+        <GroupedList logs={logs} crumb={crumb} canonicalPath={canonicalPath} />
       )}
     </div>
   )
@@ -80,10 +84,12 @@ export default function LogDashboard(): JSX.Element {
 
 function FlatList({
   logs,
-  crumb
+  crumb,
+  canonicalPath
 }: {
   logs: LogQueryRow[]
   crumb: (row: LogQueryRow) => string
+  canonicalPath: (path: string) => string
 }): JSX.Element {
   const shade = useAppStore((s) => s.shade)
   const openSession = useAppStore((s) => s.openSession)
@@ -93,9 +99,9 @@ function FlatList({
         const colour = allianceClass(row.alliance)
         return (
           <div
-            key={`${row.sessionPath}/${row.filename}`}
+            key={`${canonicalPath(row.sessionPath)}/${row.filename}`}
             className={`log-row${shade === 'tint' ? ` tint-${colour}` : ''}`}
-            onClick={() => openSession(row.sessionPath)}
+            onClick={() => openSession(canonicalPath(row.sessionPath))}
             title={row.filename}
           >
             <span className={`stripe ${colour}`} />
@@ -113,10 +119,12 @@ function FlatList({
 
 function GroupedList({
   logs,
-  crumb
+  crumb,
+  canonicalPath
 }: {
   logs: LogQueryRow[]
   crumb: (row: LogQueryRow) => string
+  canonicalPath: (path: string) => string
 }): JSX.Element {
   const shade = useAppStore((s) => s.shade)
   const openSession = useAppStore((s) => s.openSession)
@@ -126,12 +134,13 @@ function GroupedList({
   const sections = useMemo(() => {
     const map = new Map<string, LogQueryRow[]>()
     for (const row of logs) {
-      const list = map.get(row.sessionPath) ?? []
+      const path = canonicalPath(row.sessionPath)
+      const list = map.get(path) ?? []
       list.push(row)
-      map.set(row.sessionPath, list)
+      map.set(path, list)
     }
     return [...map.entries()]
-  }, [logs])
+  }, [logs, canonicalPath])
 
   return (
     <div className="log-sections">

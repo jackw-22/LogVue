@@ -1,9 +1,21 @@
 import type { SessionNode } from '@shared/types/session'
 
+/** Stable comparison key for absolute paths that may arrive with Windows slash/case variants. */
+export function normalizePathKey(path: string): string {
+  let normal = path.replace(/\\/g, '/')
+  normal = normal.replace(/\/+$/, '')
+  if (/^[a-z]:\//i.test(normal) || normal.startsWith('//')) return normal.toLowerCase()
+  return normal
+}
+
+export function pathsEqual(a: string, b: string): boolean {
+  return normalizePathKey(a) === normalizePathKey(b)
+}
+
 /** Depth-first search for the node at `path` in the tree served to the renderer. */
 export function findNode(nodes: SessionNode[], path: string): SessionNode | null {
   for (const node of nodes) {
-    if (node.path === path) return node
+    if (pathsEqual(node.path, path)) return node
     const hit = findNode(node.children, path)
     if (hit) return hit
   }
@@ -24,7 +36,7 @@ export function buildPathLabels(
   out: Map<string, PathLabels> = new Map()
 ): Map<string, PathLabels> {
   for (const node of nodes) {
-    out.set(node.path, { label: node.displayName, parentLabel })
+    out.set(normalizePathKey(node.path), { label: node.displayName, parentLabel })
     buildPathLabels(node.children, node.displayName, out)
   }
   return out

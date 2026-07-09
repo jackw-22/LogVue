@@ -10,10 +10,12 @@ import { formatBytes } from '@shared/format/bytes'
 import {
   useNotes,
   useFolderFiles,
+  useOpenFile,
   usePromoteFolder,
   useSession,
   useSettings,
   useShowFile,
+  useShowFolder,
   useUpdateMeta,
   useWriteNotes
 } from '../api/hooks'
@@ -34,6 +36,17 @@ interface Props {
   onNewChild: () => void
 }
 
+interface FileMenuState {
+  filename: string
+  x: number
+  y: number
+}
+
+function filePath(dir: string, filename: string): string {
+  const separator = dir.includes('\\') ? '\\' : '/'
+  return `${dir.replace(/[\\/]+$/, '')}${separator}${filename}`
+}
+
 export default function SessionDetails({ path, onNewChild }: Props): JSX.Element {
   const { data: session, isLoading } = useSession(path)
   const { data: settings } = useSettings()
@@ -42,7 +55,9 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
   const update = useUpdateMeta(path)
   const promote = usePromoteFolder(path)
   const saveNotes = useWriteNotes()
+  const openFile = useOpenFile()
   const showFile = useShowFile()
+  const showFolder = useShowFolder()
   const select = useAppStore((s) => s.select)
   const setView = useAppStore((s) => s.setView)
   const sourceName = settings?.hubDataSource === 'folder' ? 'Folder Import' : 'Control Hub'
@@ -50,6 +65,7 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
   const [name, setName] = useState('')
   const [tags, setTags] = useState('')
   const [draftNotes, setDraftNotes] = useState('')
+  const [fileMenu, setFileMenu] = useState<FileMenuState | null>(null)
 
   // Reset local edit state whenever the loaded session changes.
   useEffect(() => {
@@ -94,6 +110,17 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
       if (dirtyRef.current) saveMut({ path, md: draftRef.current })
     }
   }, [path, saveMut])
+
+  useEffect(() => {
+    if (!fileMenu) return
+    const close = () => setFileMenu(null)
+    window.addEventListener('click', close)
+    window.addEventListener('keydown', close)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('keydown', close)
+    }
+  }, [fileMenu])
 
   if (isLoading || !session) return <div className="details-empty">Loading…</div>
 
@@ -167,15 +194,22 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
           placeholder="swerve, localization"
         />
       </label>
-      {parsedTags.length > 0 && (
+      <div className="session-actions-row">
         <div className="tag-chips">
-          {parsedTags.map((t) => (
-            <span key={t} className="chip">
-              {t}
-            </span>
-          ))}
+          {parsedTags.length === 0 ? (
+            <span className="chip placeholder">No tags added</span>
+          ) : (
+            parsedTags.map((t) => (
+              <span key={t} className="chip">
+                {t}
+              </span>
+            ))
+          )}
         </div>
-      )}
+        <button type="button" className="ghost sm" onClick={() => showFolder.mutate(path)}>
+          Show folder
+        </button>
+      </div>
 
       {isMatchType(m.session_type) && <MatchInfoEditor path={path} match={m.match} />}
       {isMatchType(m.session_type) && <SuggestedLogs sessionPath={path} match={m.match} />}
@@ -203,7 +237,13 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
             {files.map((f) => {
               const imported = importedByName.get(f.filename)
               return (
-                <li key={f.filename}>
+                <li
+                  key={f.filename}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setFileMenu({ filename: f.filename, x: e.clientX, y: e.clientY })
+                  }}
+                >
                   <span className="kind-badge boxed">{kindBadge(f.kind)}</span>
                   <span className="file-name">{f.filename}</span>
                   <span className="mono small muted">{formatBytes(f.sizeBytes)}</span>
@@ -213,9 +253,9 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
                   <button
                     type="button"
                     className="ghost sm"
-                    onClick={() => showFile.mutate({ path, filename: f.filename })}
+                    onClick={() => openFile.mutate({ path, filename: f.filename })}
                   >
-                    Show in folder
+                    Open
                   </button>
                 </li>
               )
@@ -248,6 +288,51 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
             + New child session
           </button>
         </section>
+      )}
+
+      {fileMenu && (
+        <div
+          className="context-menu"
+          style={{ left: fileMenu.x, top: fileMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              openFile.mutate({ path, filename: fileMenu.filename })
+              setFileMenu(null)
+            }}
+          >
+            Open
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              showFile.mutate({ path, filename: fileMenu.filename })
+              setFileMenu(null)
+            }}
+          >
+            Show in folder
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard.writeText(fileMenu.filename)
+              setFileMenu(null)
+            }}
+          >
+            Copy filename
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard.writeText(filePath(path, fileMenu.filename))
+              setFileMenu(null)
+            }}
+          >
+            Copy path
+          </button>
+        </div>
       )}
     </div>
   )
