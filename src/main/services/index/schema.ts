@@ -11,7 +11,7 @@
  * compares it against `PRAGMA user_version` and, on mismatch, drops and recreates
  * the derived tables (they're rebuilt from disk anyway — see §6.2 cold start).
  */
-export const INDEX_SCHEMA_VERSION = 2
+export const INDEX_SCHEMA_VERSION = 3
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS sessions (

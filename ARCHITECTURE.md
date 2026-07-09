@@ -424,23 +424,14 @@ Adopting the spec's recommended defaults, encoded as constants/behaviour:
 
 Anything here can be revisited, but the code assumes these until changed.
 
-### 10.1 Container folders vs sessions (built — Phase 4c)
+### 10.1 Grouping folders are sessions
 
-Bare folders (no `session.json`) currently render with an **"unrecognised"** badge,
-which wrongly implies they're an incomplete state needing promotion. But some folders
-— year groupings like `2026/`, or organisational buckets — are legitimately *just
-folders*, never sessions. UX feedback: don't treat these as errors.
+The app's core model is "everything is a session." A date folder or organisational
+grouping such as `2026/` is therefore just a lightweight `general_session`, not a
+separate container type. This keeps grouping folders searchable, visible in facets,
+and editable with the same metadata/notes model as every other archive node.
 
-Plan: a bare folder is a neutral **container** by default, and the tree offers two
-explicit actions instead of nagging:
-- **Recognise as session** → writes `session.json` (current `promoteFolder`).
-- **Keep as folder** → marks it a container so it stops being offered as a session
-  and renders as a plain group (no session chrome, excluded from session filters/counts).
-
-Decided: the marker is a `session_type: 'container'` sentinel in a minimal
-`session.json` — it travels with a copied archive and is visible on disk (invariant #6).
-`container` is a valid `SessionType` but excluded from the type pickers
-(`SELECTABLE_SESSION_TYPES`) and from session search/facets. In the UI, containers and
-bare folders render as plain groups (no stripe/chrome, "folder" chip for explicit
-containers) and get a lightweight `FolderDetails` view offering **Recognise as session**
-(existing `promoteFolder` / `updateMeta`) or **Keep as folder** (writes the sentinel).
+Bare folders without `session.json` can still appear in the tree when discovered on
+disk. The lightweight `FolderDetails` view offers **Recognise as session**, which
+writes a normal `general_session` `session.json`. The "Date folder" creation flow also
+creates a `general_session`.

@@ -7,7 +7,7 @@ import { findDuplicates, type ImportIdentity } from '../src/main/services/import
 import { importToNewSession, importToSession } from '../src/main/services/import/ImportService'
 import { uniqueFilePath } from '../src/main/services/archive/paths'
 import { createSession } from '../src/main/services/archive/ArchiveService'
-import type { AdbClient } from '../src/main/services/adb/AdbClient'
+import type { AdbLike } from '../src/main/services/adb/AdbClient'
 import type { HubLogRef } from '../src/shared/types/import'
 
 describe('guessFileKind', () => {
@@ -106,7 +106,7 @@ describe('importToSession', () => {
     const before = JSON.parse(readFileSync(join(session.path, 'session.json'), 'utf-8')).updated_at
     await new Promise((r) => setTimeout(r, 5))
 
-    const res = await importToSession(adb as unknown as AdbClient, null, {
+    const res = await importToSession(adb as unknown as AdbLike, null, {
       ...ref('AutoOpMode_log_20260704_115005_104.rlog'),
       sessionPath: session.path
     })
@@ -130,8 +130,8 @@ describe('importToSession', () => {
 
   it('appends (never replaces) and disambiguates a colliding filename', async () => {
     const session = createSession({ parentPath: root, displayName: 'Q4', sessionType: 'official_match' })
-    await importToSession(adb as unknown as AdbClient, null, { ...ref('A_log_1.rlog'), sessionPath: session.path })
-    await importToSession(adb as unknown as AdbClient, null, { ...ref('A_log_1.rlog'), sessionPath: session.path })
+    await importToSession(adb as unknown as AdbLike, null, { ...ref('A_log_1.rlog'), sessionPath: session.path })
+    await importToSession(adb as unknown as AdbLike, null, { ...ref('A_log_1.rlog'), sessionPath: session.path })
 
     const meta = JSON.parse(readFileSync(join(session.path, 'session.json'), 'utf-8'))
     expect(meta.files.map((f: { filename: string }) => f.filename)).toEqual(['A_log_1.rlog', 'A_log_1_2.rlog'])
@@ -142,7 +142,7 @@ describe('importToSession', () => {
     const bare = join(root, 'loose')
     mkdirSync(bare, { recursive: true })
 
-    const res = await importToSession(adb as unknown as AdbClient, null, {
+    const res = await importToSession(adb as unknown as AdbLike, null, {
       ...ref('B_log_1.rlog'),
       sessionPath: bare
     })
@@ -161,7 +161,7 @@ describe('importToNewSession', () => {
   afterEach(() => rmSync(root, { recursive: true, force: true }))
 
   it('creates a session and imports every selected log into it', async () => {
-    const res = await importToNewSession(adb as unknown as AdbClient, null, {
+    const res = await importToNewSession(adb as unknown as AdbLike, null, {
       parentPath: root,
       displayName: '2026-07-04 Drivebase Tuning',
       sessionType: 'tuning_session',

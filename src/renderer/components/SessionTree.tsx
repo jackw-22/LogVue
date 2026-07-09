@@ -4,22 +4,19 @@ import { useArchiveTree } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
 import { allianceClass } from '../lib/alliance'
 
-/**
- * Top-level folders render as group headers (still selectable — they're often real
- * sessions like a competition event); everything beneath renders as stripe rows,
- * coloured by alliance, with a log-count chip.
- */
-function GroupHeader({ node }: { node: SessionNode }): JSX.Element {
+function RootRow(): JSX.Element {
   const selectedPath = useAppStore((s) => s.selectedPath)
   const select = useAppStore((s) => s.select)
+
   return (
     <div
-      className={`tree-group${selectedPath === node.path ? ' selected' : ''}`}
-      onClick={() => select(node.path)}
-      title={node.path}
+      className={`tree-root${selectedPath === null ? ' selected' : ''}`}
+      onClick={() => select(null)}
+      title="Show all sessions and logs"
     >
-      {node.displayName}
-      {node.sessionType === 'container' && <span className="chip folder">folder</span>}
+      <span className="tree-root-icon">⌂</span>
+      <span className="tree-name">Library</span>
+      <span className="chip count">all</span>
     </div>
   )
 }
@@ -29,8 +26,7 @@ function TreeRow({ node, depth }: { node: SessionNode; depth: number }): JSX.Ele
   const select = useAppStore((s) => s.select)
   const shade = useAppStore((s) => s.shade)
 
-  const isContainer = node.sessionType === 'container'
-  const isFolder = !node.hasSessionJson || isContainer
+  const isFolder = !node.hasSessionJson
   const colour = allianceClass(node.match?.alliance ?? null)
   const tint = shade === 'tint' && !isFolder ? ` tint-${colour}` : ''
 
@@ -38,14 +34,14 @@ function TreeRow({ node, depth }: { node: SessionNode; depth: number }): JSX.Ele
     <>
       <div
         className={`tree-row${selectedPath === node.path ? ' selected' : ''}${tint}`}
-        style={{ paddingLeft: 10 + (depth - 1) * 14 }}
+        style={{ '--tree-depth': depth } as React.CSSProperties}
         onClick={() => select(node.path)}
         title={node.path}
       >
+        <span className="tree-indent" aria-hidden="true" />
         <span className={`stripe ${isFolder ? 'none' : colour}`} />
         <span className={`tree-name${isFolder ? ' folder' : ''}`}>{node.displayName}</span>
-        {isContainer && <span className="chip folder">folder</span>}
-        {!isContainer && (node.hasSessionJson || node.logCount > 0) && (
+        {(node.hasSessionJson || node.logCount > 0) && (
           <span className="chip count">{formatLogCount(node.logCount)}</span>
         )}
       </div>
@@ -65,13 +61,9 @@ export default function SessionTree(): JSX.Element {
 
   return (
     <div className="tree">
+      <RootRow />
       {tree.map((node) => (
-        <div key={node.path} className="tree-section">
-          <GroupHeader node={node} />
-          {node.children.map((child) => (
-            <TreeRow key={child.path} node={child} depth={1} />
-          ))}
-        </div>
+        <TreeRow key={node.path} node={node} depth={0} />
       ))}
     </div>
   )

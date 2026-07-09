@@ -1,5 +1,9 @@
 import { create } from 'zustand'
-import type { SessionType } from '@shared/types/session'
+import {
+  GENERAL_FILTER_TYPES,
+  MATCH_FILTER_TYPES,
+  PRACTICE_FILTER_TYPES
+} from '@shared/constants/sessionTypes'
 import type { SessionQuery } from '@shared/types/query'
 
 /** Which top-level view the main pane shows. */
@@ -7,8 +11,8 @@ export type View = 'archive' | 'device'
 
 /** Quick-find alliance chip. */
 export type AllianceFilter = 'all' | 'red' | 'blue' | 'none'
-/** Quick-find type chip — 'all' or one concrete session type. */
-export type TypeFilter = 'all' | SessionType
+/** Quick-find type chip; buckets may map to multiple preserved session types. */
+export type TypeFilter = 'all' | 'match' | 'practice' | 'general'
 /** How alliance colour is painted on rows: a left stripe, or a full row tint. */
 export type ShadeMode = 'stripe' | 'tint'
 /** The "All logs" dashboard layout. */
@@ -66,6 +70,13 @@ export function toSessionQuery(
     text: search.trim() || undefined,
     alliances: alliance === 'red' || alliance === 'blue' ? [alliance] : undefined,
     noAlliance: alliance === 'none' || undefined,
-    sessionTypes: typeFilter === 'all' ? undefined : [typeFilter]
+    sessionTypes:
+      typeFilter === 'match'
+        ? [...MATCH_FILTER_TYPES]
+        : typeFilter === 'practice'
+          ? [...PRACTICE_FILTER_TYPES]
+          : typeFilter === 'general'
+            ? [...GENERAL_FILTER_TYPES]
+            : undefined
   }
 }

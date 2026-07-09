@@ -9,7 +9,7 @@ import type { Session, SessionFile } from '@shared/types/session'
 import { createSession } from '../archive/ArchiveService'
 import { readMetadataOrDefault, writeMetadata } from '../archive/SessionStore'
 import { uniqueFilePath } from '../archive/paths'
-import type { AdbClient } from '../adb/AdbClient'
+import type { AdbLike } from '../adb/AdbClient'
 import { getIndexStore, reindexSession } from '../index/indexService'
 import { guessFileKind } from './fileKind'
 import { findDuplicates } from './identity'
@@ -25,7 +25,7 @@ import { findDuplicates } from './identity'
  *   4. re-index the session so the hub-log row flips to "imported"
  */
 export async function importToSession(
-  adb: AdbClient,
+  adb: AdbLike,
   root: string | null | undefined,
   req: ImportRequest
 ): Promise<ImportResult> {
@@ -75,7 +75,7 @@ export async function importToSession(
  * duplicate, and the user explicitly asked for these logs here.
  */
 export async function importToNewSession(
-  adb: AdbClient,
+  adb: AdbLike,
   root: string | null | undefined,
   req: NewSessionImportRequest
 ): Promise<NewSessionImportResult> {

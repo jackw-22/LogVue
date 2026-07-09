@@ -13,11 +13,9 @@ const ALLIANCE_CHIPS: { value: AllianceFilter; label: string }[] = [
 
 const TYPE_CHIPS: { value: TypeFilter; label: string }[] = [
   { value: 'all', label: 'All types' },
-  { value: 'official_match', label: 'Match' },
-  { value: 'practice_match', label: 'Practice' },
-  { value: 'tuning_session', label: 'Tuning' },
-  { value: 'debug_session', label: 'Debug' },
-  { value: 'workshop_session', label: 'Workshop' }
+  { value: 'match', label: 'Match' },
+  { value: 'practice', label: 'Practice' },
+  { value: 'general', label: 'General' }
 ]
 
 const SHADE_CHIPS: { value: ShadeMode; label: string }[] = [

@@ -9,6 +9,13 @@ import type { IpcApi } from '@shared/types/ipc'
 const api: Api = {
   invoke<K extends keyof IpcApi>(channel: K, ...args: Parameters<IpcApi[K]>) {
     return ipcRenderer.invoke(channel, ...args) as ReturnType<IpcApi[K]>
+  },
+  onArchiveChanged(handler) {
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof handler>[0]) => {
+      handler(payload)
+    }
+    ipcRenderer.on('archive:changed', listener)
+    return () => ipcRenderer.off('archive:changed', listener)
   }
 }
 

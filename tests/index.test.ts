@@ -81,6 +81,27 @@ describe('collectIndexRows', () => {
     expect(bare.session_id).toBeTruthy() // generated, disposable
   })
 
+  it('indexes loose files physically present in session folders', () => {
+    const dir = join(root, 'General')
+    writeSession(dir, {
+      session_id: 'general-1',
+      session_type: 'general_session',
+      display_name: 'General'
+    })
+    writeFileSync(join(dir, 'TeleOp_log_1.rlog'), 'abc')
+
+    const files = collectIndexRows(root).files
+
+    expect(files).toHaveLength(1)
+    expect(files[0]).toMatchObject({
+      session_id: 'general-1',
+      filename: 'TeleOp_log_1.rlog',
+      kind: 'teleop_log',
+      file_size_bytes: 3,
+      remote_path: null
+    })
+  })
+
   it('projects deduped, trimmed tags into (session, tag) rows', () => {
     writeSession(join(root, 'Tuning'), {
       session_id: 'tag-1',

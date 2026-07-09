@@ -9,37 +9,45 @@ export const SESSION_TYPES = [
   'debug_session',
   'test_session',
   'general_session',
-  'other',
-  // A plain grouping folder (e.g. `2026/`), explicitly kept as a folder rather than a
-  // session (ARCHITECTURE §10.1). Excluded from the type pickers and from search/facets.
-  'container'
+  'other'
 ] as const
 
 export type SessionType = (typeof SESSION_TYPES)[number]
 
-/** The container sentinel — a folder the user has declared "not a session". */
-export const CONTAINER_TYPE = 'container' satisfies SessionType
-
-export function isContainerType(t: SessionType | string): boolean {
-  return t === CONTAINER_TYPE
-}
-
 export const SESSION_TYPE_LABELS: Record<SessionType, string> = {
   competition_event: 'Competition event',
-  official_match: 'Official match',
-  practice_match: 'Practice match',
-  replay: 'Replay',
-  workshop_session: 'Workshop session',
-  tuning_session: 'Tuning session',
-  debug_session: 'Debug session',
-  test_session: 'Test session',
-  general_session: 'General session',
-  other: 'Other',
-  container: 'Folder'
+  official_match: 'Match',
+  practice_match: 'Practice',
+  replay: 'Match',
+  workshop_session: 'General',
+  tuning_session: 'General',
+  debug_session: 'General',
+  test_session: 'General',
+  general_session: 'General',
+  other: 'General'
 }
 
-/** Types offered in the "new session" / type-change pickers — `container` is set via
- *  the tree's "Keep as folder" action, not chosen as a session type. */
-export const SELECTABLE_SESSION_TYPES = SESSION_TYPES.filter(
-  (t) => t !== CONTAINER_TYPE
-) as readonly SessionType[]
+/** Types offered in the "new session" / type-change pickers. */
+export const SELECTABLE_SESSION_TYPES = [
+  'general_session',
+  'competition_event',
+  'official_match',
+  'practice_match'
+] as const satisfies readonly SessionType[]
+
+export const MATCH_FILTER_TYPES = ['official_match', 'replay'] as const satisfies readonly SessionType[]
+export const PRACTICE_FILTER_TYPES = ['practice_match'] as const satisfies readonly SessionType[]
+export const GENERAL_FILTER_TYPES = [
+  'general_session',
+  'workshop_session',
+  'tuning_session',
+  'debug_session',
+  'test_session',
+  'other'
+] as const satisfies readonly SessionType[]
+
+export function toSelectableSessionType(type: SessionType): (typeof SELECTABLE_SESSION_TYPES)[number] {
+  if (type === 'competition_event' || type === 'official_match' || type === 'practice_match') return type
+  if (type === 'replay') return 'official_match'
+  return 'general_session'
+}

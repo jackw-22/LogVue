@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -98,7 +98,7 @@ describe('listFolderFiles', () => {
 })
 
 describe('createSession', () => {
-  it('creates a folder-safe dir, session.json and notes.md', () => {
+  it('creates a folder-safe dir and session.json without placeholder notes', () => {
     const s = createSession({ parentPath: root, displayName: 'Q4 Blue B2', sessionType: 'official_match' })
     expect(s.name).toBe('Q4_Blue_B2')
     expect(s.metadata.display_name).toBe('Q4 Blue B2')
@@ -106,6 +106,7 @@ describe('createSession', () => {
     expect(s.hasSessionJson).toBe(true)
     const onDisk = JSON.parse(readFileSync(join(s.path, 'session.json'), 'utf-8'))
     expect(onDisk.session_id).toBeTruthy()
+    expect(existsSync(join(s.path, 'notes.md'))).toBe(false)
   })
 
   it('disambiguates colliding names', () => {
@@ -125,6 +126,7 @@ describe('promoteFolder', () => {
     expect(promoted.hasSessionJson).toBe(true)
     expect(promoted.metadata.display_name).toBe('Random_Folder')
     expect(promoted.metadata.session_type).toBe('general_session')
+    expect(existsSync(join(bare, 'notes.md'))).toBe(false)
   })
 })
 

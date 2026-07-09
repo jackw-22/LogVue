@@ -21,13 +21,43 @@ export interface RemoteFile {
   file_size_bytes: number | null
 }
 
+export interface AdbTimeSample {
+  localBeforeMs: number
+  localAfterMs: number
+  hubNowMs: number
+  hubTimezoneOffsetMinutes: number | null
+}
+
+export interface AdbLike {
+  getStatus(): Promise<AdbStatus>
+  listRemoteFiles(): Promise<RemoteFile[]>
+  pull(remotePath: string, destPath: string): Promise<void>
+  getTimeSample(): Promise<AdbTimeSample>
+}
+
+export function parseAdbDateOutput(out: string): number {
+  const raw = out.trim().split(/\s+/)[0] ?? ''
+  if (/^\d{13}$/.test(raw)) return Number(raw)
+  if (/^\d{10}$/.test(raw)) return Number(raw) * 1000
+  const secondsPrefix = /^(\d{10})/.exec(raw)
+  if (secondsPrefix) return Number(secondsPrefix[1]) * 1000
+  throw new Error(`Could not parse Control Hub time: ${out.trim()}`)
+}
+
+export function parseAdbTimezoneOffset(out: string): number | null {
+  const match = /([+-])(\d{2})(\d{2})/.exec(out)
+  if (!match) return null
+  const sign = match[1] === '-' ? -1 : 1
+  return sign * (Number(match[2]) * 60 + Number(match[3]))
+}
+
 /**
  * Wraps the *system* `adb` (ARCHITECTURE §7). Read-only and concurrency-safe:
  * `adb devices`, `adb shell ls/find`. We deliberately never run `kill-server` /
  * `start-server` — the FTC IDE likely owns the shared adb server and we must
  * coexist, attaching to whatever daemon is already running.
  */
-export class AdbClient {
+export class AdbClient implements AdbLike {
   /** Run a raw `adb` invocation. Maps a missing binary to {@link AdbNotFoundError}. */
   private async run(args: string[], timeout = 15_000): Promise<string> {
     try {
@@ -101,6 +131,19 @@ export class AdbClient {
    */
   async pull(remotePath: string, destPath: string): Promise<void> {
     await this.run(['pull', remotePath, destPath], 120_000)
+  }
+
+  /**
+   * Sample the Control Hub's current clock and compare it with this computer's clock.
+   * Most Android shells support `%s`; milliseconds are best-effort via `%3N`.
+   */
+  async getTimeSample(): Promise<AdbTimeSample> {
+    const localBeforeMs = Date.now()
+    const out = await this.runShell("date '+%s%3N %z'").catch(() => this.runShell('date +%s'))
+    const localAfterMs = Date.now()
+    const hubNowMs = parseAdbDateOutput(out)
+    const hubTimezoneOffsetMinutes = parseAdbTimezoneOffset(out)
+    return { localBeforeMs, localAfterMs, hubNowMs, hubTimezoneOffsetMinutes }
   }
 
   private async findFallback(): Promise<RemoteFile[]> {

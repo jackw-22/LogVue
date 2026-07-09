@@ -1,7 +1,9 @@
 import { join } from 'path'
-import { existsSync, readdirSync } from 'fs'
+import { existsSync, readdirSync, statSync } from 'fs'
 import type { SessionMetadata } from '@shared/types/session'
+import { INDEX_FILE, NOTES_FILE, RESERVED_NAMES } from '../archive/paths'
 import { readMetadataOrDefault } from '../archive/SessionStore'
+import { guessFileKind } from '../import/fileKind'
 import type { IndexStore } from './IndexStore'
 
 /** One row of the `sessions` table — a flattened, queryable projection of `session.json`. */
@@ -69,6 +71,41 @@ export function toFileRows(sessionId: string, m: SessionMetadata): FileRow[] {
   }))
 }
 
+/**
+ * File rows for everything physically present in the session folder. Tracked
+ * files keep their curated metadata; loose files are still indexed from disk so
+ * copied-in logs show up in search/results before being formally imported.
+ */
+export function collectFileRows(dir: string, m: SessionMetadata): FileRow[] {
+  const rowsByName = new Map(toFileRows(m.session_id, m).map((row) => [row.filename, row]))
+  if (!existsSync(dir)) return [...rowsByName.values()]
+
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isFile()) continue
+    const name = entry.name
+    if (RESERVED_NAMES.has(name) || name === NOTES_FILE || name === INDEX_FILE) continue
+    if (rowsByName.has(name)) continue
+
+    let fileSize: number | null = null
+    try {
+      fileSize = statSync(join(dir, name)).size
+    } catch {
+      fileSize = null
+    }
+    rowsByName.set(name, {
+      session_id: m.session_id,
+      filename: name,
+      kind: guessFileKind(name),
+      remote_path: null,
+      original_filename: name,
+      file_size_bytes: fileSize,
+      imported_at: null
+    })
+  }
+
+  return [...rowsByName.values()]
+}
+
 /** Deduped, blank-stripped (session, tag) rows for the tags table. */
 export function toTagRows(sessionId: string, m: SessionMetadata): TagRow[] {
   const seen = new Set<string>()
@@ -85,7 +122,7 @@ export function toTagRows(sessionId: string, m: SessionMetadata): TagRow[] {
 function walk(dir: string, out: IndexRows): void {
   const { metadata } = readMetadataOrDefault(dir)
   out.sessions.push(toSessionRow(dir, metadata))
-  out.files.push(...toFileRows(metadata.session_id, metadata))
+  out.files.push(...collectFileRows(dir, metadata))
   out.tags.push(...toTagRows(metadata.session_id, metadata))
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) walk(join(dir, entry.name), out)

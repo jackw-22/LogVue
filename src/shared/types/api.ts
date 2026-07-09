@@ -1,4 +1,4 @@
-import type { IpcApi } from './ipc'
+import type { ArchiveChangedEvent, IpcApi } from './ipc'
 
 /**
  * The allow-listed surface exposed on `window.api` by the preload bridge.
@@ -10,6 +10,7 @@ export interface Api {
     channel: K,
     ...args: Parameters<IpcApi[K]>
   ): ReturnType<IpcApi[K]>
+  onArchiveChanged(handler: (event: ArchiveChangedEvent) => void): () => void
 }
 
 declare global {

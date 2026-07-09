@@ -3,7 +3,12 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { app } from 'electron'
 import type { AppSettings } from '@shared/types/session'
 
-const DEFAULTS: AppSettings = { archiveRoot: null }
+const DEFAULTS: AppSettings = {
+  archiveRoot: null,
+  teamNumber: null,
+  hubDataSource: 'adb',
+  hubLogFolder: null
+}
 
 function settingsPath(): string {
   return join(app.getPath('userData'), 'settings.json')

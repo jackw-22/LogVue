@@ -3,6 +3,7 @@ import { app, BrowserWindow, shell } from 'electron'
 import { registerIpcHandlers } from './ipc/registry'
 import { getSettings } from './config/settings'
 import { closeIndex, ensureIndexBuilt } from './services/index/indexService'
+import { startArchiveWatcher, stopArchiveWatcher } from './services/watcher/Watcher'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -48,7 +49,9 @@ app.whenReady().then(() => {
   // empty/stale, before the renderer asks for anything. The index is disposable,
   // so a failure here (e.g. a locked/corrupt file) must not block the UI.
   try {
-    ensureIndexBuilt(getSettings().archiveRoot)
+    const root = getSettings().archiveRoot
+    ensureIndexBuilt(root)
+    startArchiveWatcher(root)
   } catch (err) {
     console.error('Index build on startup failed (will run without index):', err)
   }
@@ -63,4 +66,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('will-quit', () => closeIndex())
+app.on('will-quit', () => {
+  stopArchiveWatcher()
+  closeIndex()
+})

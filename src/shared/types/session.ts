@@ -34,6 +34,8 @@ export interface MatchInfo {
   label?: string
   type?: string
   number?: number
+  /** Replay index when a match had to be re-run; absent for a first playing. */
+  replay?: number
   alliance?: 'red' | 'blue' | string
   station?: string
   team_number?: number
@@ -115,4 +117,7 @@ export interface CreateSessionInput {
 
 export interface AppSettings {
   archiveRoot: string | null
+  teamNumber: number | null
+  hubDataSource: 'adb' | 'folder'
+  hubLogFolder: string | null
 }

@@ -2,11 +2,11 @@ import { useMemo } from 'react'
 import type { LogQueryRow } from '@shared/types/query'
 import { SESSION_TYPE_LABELS } from '@shared/constants/sessionTypes'
 import { formatBytes } from '@shared/format/bytes'
-import { useArchiveTree, useLogQuery } from '../api/hooks'
+import { useArchiveTree, useLogQuery, useSettings } from '../api/hooks'
 import { toSessionQuery, useAppStore } from '../stores/appStore'
 import { allianceClass, kindBadge } from '../lib/alliance'
 import { buildPathLabels } from '../lib/tree'
-import { formatTimestamp } from '../lib/time'
+import { formatRecentTimestamp, formatTimestamp } from '../lib/time'
 
 /**
  * The archive dashboard when nothing is selected: every imported log across the
@@ -19,6 +19,8 @@ export default function LogDashboard(): JSX.Element {
   const typeFilter = useAppStore((s) => s.typeFilter)
   const mode = useAppStore((s) => s.dashboardMode)
   const setMode = useAppStore((s) => s.setDashboardMode)
+  const { data: settings } = useSettings()
+  const sourceName = settings?.hubDataSource === 'folder' ? 'Folder Import' : 'Control Hub'
 
   const query = useMemo(
     () => toSessionQuery(search, alliance, typeFilter),
@@ -65,7 +67,7 @@ export default function LogDashboard(): JSX.Element {
 
       {logs.length === 0 ? (
         <div className="details-empty">
-          {isLoading ? 'Loading…' : 'No logs match. Import some from the Control Hub tab, or clear the filters.'}
+          {isLoading ? 'Loading…' : `No logs match. Import some from the ${sourceName} tab, or clear the filters.`}
         </div>
       ) : mode === 'flat' ? (
         <FlatList logs={logs} crumb={crumb} />
@@ -101,7 +103,7 @@ function FlatList({
             <span className="log-opmode">{row.opmode ?? row.filename}</span>
             <span className="log-crumb muted">{crumb(row)}</span>
             <span className="log-size mono muted">{formatBytes(row.sizeBytes)}</span>
-            <span className="log-when mono muted">{formatTimestamp(row.recorded)}</span>
+            <span className="log-when mono muted">{formatRecentTimestamp(row.recorded)}</span>
           </div>
         )
       })}

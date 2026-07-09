@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { CreateSessionInput, SessionMetadata } from '@shared/types/session'
+import type { AppSettings, CreateSessionInput, SessionMetadata } from '@shared/types/session'
 import type {
   HubLogRef,
   ImportRequest,
   NewSessionImportRequest
 } from '@shared/types/import'
 import type { SessionQuery } from '@shared/types/query'
+import type { FtcScoutEventSearchRequest, FtcScoutSyncRequest } from '@shared/types/ftcscout'
 import { api } from './client'
 
 const keys = {
@@ -15,9 +16,11 @@ const keys = {
   files: (path: string) => ['archive', 'files', path] as const,
   notes: (path: string) => ['archive', 'notes', path] as const,
   adbStatus: ['adb', 'status'] as const,
+  hubTime: ['adb', 'hubTime'] as const,
   hubLogs: ['adb', 'hubLogs'] as const,
   query: (q: SessionQuery) => ['index', 'query', q] as const,
-  logQuery: (q: SessionQuery) => ['index', 'queryLogs', q] as const
+  logQuery: (q: SessionQuery) => ['index', 'queryLogs', q] as const,
+  ftcScoutEvents: (q: FtcScoutEventSearchRequest) => ['ftcscout', 'events', q] as const
 }
 
 export function useSettings() {
@@ -42,6 +45,13 @@ export function useFolderFiles(path: string | null) {
     queryKey: keys.files(path ?? ''),
     queryFn: () => api.archive.listFiles(path as string),
     enabled: !!path
+  })
+}
+
+export function useShowFile() {
+  return useMutation({
+    mutationFn: ({ path, filename }: { path: string; filename: string }) =>
+      api.archive.showFile(path, filename)
   })
 }
 
@@ -98,6 +108,59 @@ export function usePickArchiveRoot() {
   })
 }
 
+export function useSetTeamNumber() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (teamNumber: number | null) => api.settings.setTeamNumber(teamNumber),
+    onSuccess: (settings) => qc.setQueryData(keys.settings, settings)
+  })
+}
+
+function invalidateHubSource(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: keys.adbStatus })
+  qc.invalidateQueries({ queryKey: keys.hubLogs })
+  qc.invalidateQueries({ queryKey: keys.hubTime })
+}
+
+export function useSetHubDataSource() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (source: AppSettings['hubDataSource']) => api.settings.setHubDataSource(source),
+    onSuccess: (settings) => {
+      qc.setQueryData(keys.settings, settings)
+      invalidateHubSource(qc)
+    }
+  })
+}
+
+export function usePickHubLogFolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const path = await api.settings.pickHubLogFolder()
+      if (!path) return null
+      return api.settings.setHubLogFolder(path)
+    },
+    onSuccess: (settings) => {
+      if (settings) {
+        qc.setQueryData(keys.settings, settings)
+        invalidateHubSource(qc)
+      }
+    }
+  })
+}
+
+export function useClearHubLogFolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.settings.setHubLogFolder(null),
+    onSuccess: (settings) => {
+      qc.setQueryData(keys.settings, settings)
+      invalidateHubSource(qc)
+    }
+  })
+}
+
 export function useCreateSession() {
   const qc = useQueryClient()
   return useMutation({
@@ -128,15 +191,21 @@ export function usePromoteFolder(path: string) {
     onSuccess: (session) => {
       qc.setQueryData(keys.session(path), session)
       qc.invalidateQueries({ queryKey: keys.tree })
+      qc.invalidateQueries({ queryKey: ['index'] })
     }
   })
 }
 
-export function useWriteNotes(path: string) {
+/**
+ * Notes writes take their target path per-call rather than closing over it, so a
+ * deferred/autosave flush can still land on the session that was being edited
+ * even after the selection has moved on.
+ */
+export function useWriteNotes() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (md: string) => api.archive.writeNotes(path, md),
-    onSuccess: (_r, md) => qc.setQueryData(keys.notes(path), md)
+    mutationFn: ({ path, md }: { path: string; md: string }) => api.archive.writeNotes(path, md),
+    onSuccess: (_r, { path, md }) => qc.setQueryData(keys.notes(path), md)
   })
 }
 
@@ -150,6 +219,15 @@ export function useAdbStatus() {
     queryKey: keys.adbStatus,
     queryFn: api.adb.status,
     refetchInterval: 4000,
+    refetchOnWindowFocus: true
+  })
+}
+
+export function useHubTime(enabled: boolean) {
+  return useQuery({
+    queryKey: keys.hubTime,
+    queryFn: api.adb.getHubTime,
+    enabled,
     refetchOnWindowFocus: true
   })
 }
@@ -207,5 +285,26 @@ export function useUnignoreHubLog() {
   return useMutation({
     mutationFn: (remotePath: string) => api.adb.unignoreHubLog(remotePath),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.hubLogs })
+  })
+}
+
+export function useFtcScoutSync() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (req: FtcScoutSyncRequest) => api.ftcscout.syncEvent(req),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.tree })
+      qc.invalidateQueries({ queryKey: ['archive', 'session'] })
+      qc.invalidateQueries({ queryKey: ['index'] })
+    }
+  })
+}
+
+export function useFtcScoutEventSearch(query: FtcScoutEventSearchRequest, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.ftcScoutEvents(query),
+    queryFn: () => api.ftcscout.searchEvents(query),
+    enabled,
+    placeholderData: (prev) => prev
   })
 }

@@ -6,7 +6,7 @@ import type { LogQueryRow, SessionQuery, SessionQueryResult } from '@shared/type
 import type { FileKind, SessionType } from '@shared/types/session'
 import { parseRlogFilename } from '../adb/rlogFilename'
 import { IndexStore } from './IndexStore'
-import { rebuildIndex, toFileRows, toSessionRow, toTagRows } from './rebuild'
+import { collectFileRows, rebuildIndex, toSessionRow, toTagRows } from './rebuild'
 
 /**
  * Owns the single open `IndexStore` for the current archive root. The DB file lives
@@ -45,7 +45,7 @@ export function reindexSession(root: string | null | undefined, path: string): v
   const { metadata } = readMetadataOrDefault(path)
   store.indexSession(
     toSessionRow(path, metadata),
-    toFileRows(metadata.session_id, metadata),
+    collectFileRows(path, metadata),
     toTagRows(metadata.session_id, metadata)
   )
 }

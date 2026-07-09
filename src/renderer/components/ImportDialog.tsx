@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { SESSION_TYPES, SESSION_TYPE_LABELS } from '@shared/constants/sessionTypes'
+import { SELECTABLE_SESSION_TYPES, SESSION_TYPE_LABELS } from '@shared/constants/sessionTypes'
 import type { SessionType, SessionNode } from '@shared/types/session'
 import type { HubLog } from '@shared/types/hublog'
 import type { HubLogRef, ImportResult } from '@shared/types/import'
@@ -170,7 +170,7 @@ export default function ImportDialog({
                 <label>
                   Type
                   <select value={newType} onChange={(e) => setNewType(e.target.value as SessionType)}>
-                    {SESSION_TYPES.map((t) => (
+                    {SELECTABLE_SESSION_TYPES.map((t) => (
                       <option key={t} value={t}>
                         {SESSION_TYPE_LABELS[t]}
                       </option>
@@ -180,7 +180,7 @@ export default function ImportDialog({
                 <label>
                   Under
                   <select value={newParent} onChange={(e) => setNewParent(e.target.value)}>
-                    <option value={archiveRoot}>Archive root</option>
+                    <option value={archiveRoot}>Library</option>
                     {flat.map((n) => (
                       <option key={n.path} value={n.path}>
                         {'  '.repeat(n.depth)}
@@ -237,7 +237,7 @@ function Results({ entries }: { entries: Entry[] }): JSX.Element {
             </span>
           ) : (
             <span className="pill new" title={result.existing.map((e) => e.sessionPath).join('\n')}>
-              Already in {result.existing[0]?.sessionLabel ?? 'archive'}
+              Already in {result.existing[0]?.sessionLabel ?? 'library'}
             </span>
           )}
         </li>

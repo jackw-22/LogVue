@@ -1,6 +1,6 @@
 import type { HubLog, ImportStatus } from '@shared/types/hublog'
 import { getIndexStore } from '../index/indexService'
-import { AdbClient, type RemoteFile } from './AdbClient'
+import type { AdbLike, RemoteFile } from './AdbClient'
 import { parseRlogFilename } from './rlogFilename'
 
 const NOT_IMPORTED: ImportStatus = { state: 'not_imported' }
@@ -43,7 +43,7 @@ export function assembleHubLogs(
  * missing/unavailable one just yields `not_imported` for everything.
  */
 export async function listHubLogs(
-  adb: AdbClient,
+  adb: AdbLike,
   archiveRoot: string | null | undefined
 ): Promise<HubLog[]> {
   const files = await adb.listRemoteFiles()

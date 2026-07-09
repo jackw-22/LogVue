@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import type { Database as Db } from 'better-sqlite3'
 import type { ImportStatus } from '@shared/types/hublog'
 import type { HubLogRef } from '@shared/types/import'
+import type { FtcScoutEventPayload } from '@shared/types/ftcscout'
 import type { FacetCounts, SessionQuery, SessionQueryRow } from '@shared/types/query'
 import type { SessionType, FileKind } from '@shared/types/session'
 import { LOG_KINDS } from '@shared/constants/fileKinds'
@@ -144,6 +145,42 @@ export class IndexStore {
     this.db.prepare('DELETE FROM ignored_hublogs WHERE remote_path = ?').run(remotePath)
   }
 
+  /** Cached FTCScout event payload. Preserved across index rebuilds. */
+  getFtcScoutEvent(eventCode: string, season: number): FtcScoutEventPayload | null {
+    const row = this.db
+      .prepare(
+        `SELECT payload_json
+           FROM ftcscout_cache
+          WHERE event_code = ? AND season = ?
+          LIMIT 1`
+      )
+      .get(eventCode.toUpperCase(), season) as { payload_json: string } | undefined
+    if (!row) return null
+    try {
+      return JSON.parse(row.payload_json) as FtcScoutEventPayload
+    } catch {
+      return null
+    }
+  }
+
+  /** Store the full normalized FTCScout event payload for offline/later sync fallback. */
+  putFtcScoutEvent(payload: FtcScoutEventPayload): void {
+    this.db
+      .prepare(
+        `INSERT INTO ftcscout_cache (event_code, season, payload_json, last_synced)
+         VALUES (@event_code, @season, @payload_json, @last_synced)
+         ON CONFLICT(event_code, season) DO UPDATE SET
+           payload_json=excluded.payload_json,
+           last_synced=excluded.last_synced`
+      )
+      .run({
+        event_code: payload.code.toUpperCase(),
+        season: payload.season,
+        payload_json: JSON.stringify(payload),
+        last_synced: payload.lastSynced
+      })
+  }
+
   /**
    * Resolve a remote hub log's import status against the index (spec §7.3): whether
    * it's already been imported into a session, or the user has hidden it. "Imported"
@@ -179,7 +216,7 @@ export class IndexStore {
         `SELECT session_id, path, session_type, display_name, event_code,
                 team_number, alliance, session_start, sort_key
            FROM sessions s
-          WHERE (${where}) AND s.session_type <> 'container'
+          WHERE (${where})
           ORDER BY (COALESCE(s.sort_key, s.session_start) IS NULL),
                    COALESCE(s.sort_key, s.session_start) DESC,
                    s.display_name COLLATE NOCASE`
@@ -252,7 +289,7 @@ export class IndexStore {
         `SELECT f.filename, f.kind, f.file_size_bytes, f.imported_at,
                 s.path, s.display_name, s.session_type, s.alliance
            FROM files f JOIN sessions s ON s.session_id = f.session_id
-          WHERE (${where}) AND ${textClause} AND s.session_type <> 'container'`
+          WHERE (${where}) AND ${textClause}`
       )
       .all(params) as Array<{
       filename: string
@@ -309,9 +346,7 @@ export class IndexStore {
 
     return {
       sessionTypes: groupCount(
-        // Containers are folders, not sessions — keep them out of the type filter (§10.1).
         `SELECT session_type AS value, COUNT(*) AS count FROM sessions
-          WHERE session_type <> 'container'
           GROUP BY session_type ORDER BY count DESC, value`
       ),
       events: groupCount(

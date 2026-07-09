@@ -1,9 +1,18 @@
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { join } from 'path'
+import { tmpdir } from 'os'
 import { describe, expect, it } from 'vitest'
 import { parseRlogFilename } from '../src/main/services/adb/rlogFilename'
 import { parseFindOutput, parseLsOutput, remoteBasename } from '../src/main/services/adb/parseLs'
 import { assembleHubLogs } from '../src/main/services/adb/hublogs'
 import type { ImportStatus } from '../src/shared/types/hublog'
-import type { RemoteFile } from '../src/main/services/adb/AdbClient'
+import {
+  parseAdbDateOutput,
+  parseAdbTimezoneOffset,
+  type RemoteFile
+} from '../src/main/services/adb/AdbClient'
+import { FakeAdbClient, FAKE_ADB_TIME_OFFSET_MS } from '../src/main/services/adb/FakeAdbClient'
+import { createAdbClient } from '../src/main/services/adb/createAdbClient'
 
 describe('parseRlogFilename', () => {
   it('parses opmode and timestamp from a canonical name', () => {
@@ -115,5 +124,112 @@ describe('assembleHubLogs', () => {
     const a = logs.find((l) => l.opmode === 'A')!
     expect(a.import_status).toEqual({ state: 'imported', sessionPath: '/arch/Q4', sessionLabel: 'Q4 Blue B2' })
     expect(logs.find((l) => l.filename === 'noext.rlog')!.parsed_timestamp).toBeNull()
+  })
+})
+
+describe('parseAdbDateOutput', () => {
+  it('parses millisecond epoch output', () => {
+    expect(parseAdbDateOutput('1783604603123\n')).toBe(1783604603123)
+  })
+
+  it('parses second epoch output', () => {
+    expect(parseAdbDateOutput('1783604603\n')).toBe(1783604603000)
+  })
+
+  it('handles Android shells that print literal %N fragments', () => {
+    expect(parseAdbDateOutput('17836046033N\n')).toBe(1783604603000)
+  })
+})
+
+describe('parseAdbTimezoneOffset', () => {
+  it('parses numeric timezone offsets from date output', () => {
+    expect(parseAdbTimezoneOffset('17836046033N +1100\n')).toBe(660)
+    expect(parseAdbTimezoneOffset('1783604603000 -0530\n')).toBe(-330)
+  })
+
+  it('returns null when timezone is unavailable', () => {
+    expect(parseAdbTimezoneOffset('1783604603\n')).toBeNull()
+  })
+})
+
+describe('FakeAdbClient', () => {
+  it('lists .rlog files from a local hub folder as remote hub paths', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'logvue-fake-adb-'))
+    try {
+      mkdirSync(join(root, 'nested'))
+      writeFileSync(join(root, 'Auto_log_20260704_115005_104.rlog'), 'auto')
+      writeFileSync(join(root, 'nested', 'TeleOp_log_20260704_115327_882.rlog'), 'teleop')
+      writeFileSync(join(root, 'notes.txt'), 'skip')
+
+      const files = await new FakeAdbClient(root).listRemoteFiles()
+
+      expect(files).toEqual(
+        expect.arrayContaining([
+          {
+            remote_path: '/sdcard/FIRST/PsiKit/Auto_log_20260704_115005_104.rlog',
+            filename: 'Auto_log_20260704_115005_104.rlog',
+            file_size_bytes: 4
+          },
+          {
+            remote_path: '/sdcard/FIRST/PsiKit/nested/TeleOp_log_20260704_115327_882.rlog',
+            filename: 'TeleOp_log_20260704_115327_882.rlog',
+            file_size_bytes: 6
+          }
+        ])
+      )
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('pulls a remote path by copying from the fake hub folder', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'logvue-fake-adb-'))
+    const destDir = mkdtempSync(join(tmpdir(), 'logvue-fake-adb-dest-'))
+    try {
+      const source = join(root, 'Drive_log_1.rlog')
+      const dest = join(destDir, 'Drive_log_1.rlog')
+      writeFileSync(source, 'log')
+
+      await new FakeAdbClient(root).pull('/sdcard/FIRST/PsiKit/Drive_log_1.rlog', dest)
+
+      expect(existsSync(dest)).toBe(true)
+      expect(readFileSync(dest, 'utf-8')).toBe('log')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+      rmSync(destDir, { recursive: true, force: true })
+    }
+  })
+
+  it('returns a fixed five minute hub clock offset sample', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'logvue-fake-adb-'))
+    try {
+      const sample = await new FakeAdbClient(root).getTimeSample()
+      const localMidpointMs =
+        sample.localBeforeMs + (sample.localAfterMs - sample.localBeforeMs) / 2
+
+      expect(localMidpointMs - sample.hubNowMs).toBe(FAKE_ADB_TIME_OFFSET_MS)
+      expect(sample.hubTimezoneOffsetMinutes).toBeNull()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('uses no clock offset for the user-selected folder source', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'logvue-fake-adb-'))
+    try {
+      const client = createAdbClient({
+        archiveRoot: null,
+        teamNumber: null,
+        hubDataSource: 'folder',
+        hubLogFolder: root
+      })
+      const sample = await client.getTimeSample()
+      const localMidpointMs =
+        sample.localBeforeMs + (sample.localAfterMs - sample.localBeforeMs) / 2
+
+      expect(localMidpointMs - sample.hubNowMs).toBe(0)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

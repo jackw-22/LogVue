@@ -30,3 +30,17 @@ export interface AdbStatus {
   /** True when `adb` itself isn't installed/on PATH — the UI shows an install hint. */
   adbMissing?: boolean
 }
+
+export interface HubTimeSample {
+  /** Local clock timestamp taken just before the adb call. */
+  localBeforeMs: number
+  /** Local clock timestamp taken just after the adb call. */
+  localAfterMs: number
+  /** Control Hub clock timestamp in Unix epoch ms. */
+  hubNowMs: number
+  /** Control Hub timezone offset from UTC in minutes, from `date %z`, when available. */
+  hubTimezoneOffsetMinutes: number | null
+  /** Add this to a timestamp parsed from a hub-generated filename to estimate real/local time. */
+  offsetMs: number
+  roundTripMs: number
+}

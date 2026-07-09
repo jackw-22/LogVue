@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { join } from 'path'
 import type { AppInfo, IpcApi } from '@shared/types/ipc'
 import { getSettings, saveSettings } from '../config/settings'
 import * as archive from '../services/archive/ArchiveService'
@@ -11,12 +12,20 @@ import {
   rebuild,
   reindexSession
 } from '../services/index/indexService'
-import { AdbClient } from '../services/adb/AdbClient'
+import { createAdbClient } from '../services/adb/createAdbClient'
 import { listHubLogs } from '../services/adb/hublogs'
 import { importToNewSession, importToSession } from '../services/import/ImportService'
+import { FtcScoutClient } from '../services/ftcscout/FtcScoutClient'
+import { syncFtcScoutEvent } from '../services/ftcscout/syncEvent'
+import { startArchiveWatcher } from '../services/watcher/Watcher'
 
-/** One adb wrapper for the app's lifetime (stateless; attaches to the shared adb server). */
-const adb = new AdbClient()
+/** One hub-log source wrapper for the app's lifetime; refreshed when source settings change. */
+let adb = createAdbClient(getSettings())
+const ftcScout = new FtcScoutClient()
+
+function refreshAdbClient() {
+  adb = createAdbClient(getSettings())
+}
 
 /** Every channel in the contract must have exactly one handler here. */
 type Handlers = {
@@ -41,7 +50,7 @@ const handlers: Handlers = {
   'settings:pickArchiveRoot': async () => {
     const win = BrowserWindow.getFocusedWindow() ?? undefined
     const result = await dialog.showOpenDialog(win!, {
-      title: 'Choose FTC log archive folder',
+      title: 'Choose FTC log library folder',
       properties: ['openDirectory', 'createDirectory']
     })
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
@@ -50,6 +59,26 @@ const handlers: Handlers = {
     const next = saveSettings({ archiveRoot: path })
     // A new root gets a fresh index built from its contents (§6.2).
     ensureIndexBuilt(next.archiveRoot)
+    startArchiveWatcher(next.archiveRoot)
+    return next
+  },
+  'settings:setTeamNumber': async (teamNumber) => saveSettings({ teamNumber }),
+  'settings:pickHubLogFolder': async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? undefined
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Choose hub log folder',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  },
+  'settings:setHubDataSource': async (source) => {
+    const next = saveSettings({ hubDataSource: source })
+    refreshAdbClient()
+    return next
+  },
+  'settings:setHubLogFolder': async (path) => {
+    const next = saveSettings({ hubLogFolder: path })
+    refreshAdbClient()
     return next
   },
 
@@ -57,6 +86,9 @@ const handlers: Handlers = {
   'archive:tree': async () => archive.scanTree(getSettings().archiveRoot ?? ''),
   'archive:getSession': async (path) => archive.getSession(path),
   'archive:listFiles': async (path) => archive.listFolderFiles(path),
+  'archive:showFile': async (path, filename) => {
+    shell.showItemInFolder(join(path, filename))
+  },
   'archive:createSession': async (input) => {
     const session = archive.createSession(input)
     reindexSession(getSettings().archiveRoot, session.path)
@@ -82,6 +114,15 @@ const handlers: Handlers = {
   // ── ADB / Control Hub ──
   'adb:status': async () => adb.getStatus(),
   'adb:listHubLogs': async () => listHubLogs(adb, getSettings().archiveRoot),
+  'adb:getHubTime': async () => {
+    const sample = await adb.getTimeSample()
+    const localMidpointMs = sample.localBeforeMs + (sample.localAfterMs - sample.localBeforeMs) / 2
+    return {
+      ...sample,
+      offsetMs: Math.round(localMidpointMs - sample.hubNowMs),
+      roundTripMs: sample.localAfterMs - sample.localBeforeMs
+    }
+  },
   'adb:ignoreHubLog': async (entry) => {
     getIndexStore(getSettings().archiveRoot)?.ignoreHubLog(entry)
   },
@@ -91,7 +132,11 @@ const handlers: Handlers = {
 
   // ── import ──
   'import:toSession': async (req) => importToSession(adb, getSettings().archiveRoot, req),
-  'import:toNewSession': async (req) => importToNewSession(adb, getSettings().archiveRoot, req)
+  'import:toNewSession': async (req) => importToNewSession(adb, getSettings().archiveRoot, req),
+
+  // ── FTCScout ──
+  'ftcscout:searchEvents': async (req) => ftcScout.searchEvents(req),
+  'ftcscout:syncEvent': async (req) => syncFtcScoutEvent(ftcScout, req)
 }
 
 /** Wire every contract channel to its handler. Call once on app ready. */

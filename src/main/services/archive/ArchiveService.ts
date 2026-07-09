@@ -11,7 +11,7 @@ import type {
 } from '@shared/types/session'
 import { INDEX_FILE, NOTES_FILE, RESERVED_NAMES, toFolderName, uniqueChildDir } from './paths'
 import { guessFileKind } from '../import/fileKind'
-import { readMetadata, readMetadataOrDefault, writeMetadata, writeNotes } from './SessionStore'
+import { readMetadata, readMetadataOrDefault, writeMetadata } from './SessionStore'
 
 /** Count non-plumbing files in a folder, and how many look like logs. */
 function countFiles(dir: string): { fileCount: number; logCount: number } {
@@ -129,7 +129,6 @@ export function createSession(input: CreateSessionInput): Session {
     sort_key: now
   }
   const written = writeMetadata(dir, metadata)
-  writeNotes(dir, `# ${input.displayName}\n\n`)
   return { path: dir, name: basename(dir), metadata: written, hasSessionJson: true }
 }
 
@@ -146,6 +145,5 @@ export function promoteFolder(dir: string): Session {
   const existing = readMetadata(dir)
   const metadata = existing ?? makeDefaultMetadata(basename(dir))
   const written = writeMetadata(dir, metadata)
-  if (!existsSync(join(dir, NOTES_FILE))) writeNotes(dir, `# ${metadata.display_name}\n\n`)
   return { path: dir, name: basename(dir), metadata: written, hasSessionJson: true }
 }

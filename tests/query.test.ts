@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildSessionQuery } from '../src/main/services/index/query'
+import { toSessionQuery } from '../src/renderer/stores/appStore'
 
 describe('buildSessionQuery', () => {
   it('matches everything for an empty query', () => {
@@ -81,5 +82,20 @@ describe('buildSessionQuery', () => {
     expect(where).toContain('s.team_number IN (@team0)')
     expect(where).toContain('EXISTS (SELECT 1 FROM files f WHERE f.session_id = s.session_id AND f.kind = @has0)')
     expect(where).toContain('NOT EXISTS (SELECT 1 FROM files f WHERE f.session_id = s.session_id AND f.kind = @miss0)')
+  })
+})
+
+describe('toSessionQuery', () => {
+  it('maps simplified type chips to preserved session type buckets', () => {
+    expect(toSessionQuery('', 'all', 'match').sessionTypes).toEqual(['official_match', 'replay'])
+    expect(toSessionQuery('', 'all', 'practice').sessionTypes).toEqual(['practice_match'])
+    expect(toSessionQuery('', 'all', 'general').sessionTypes).toEqual([
+      'general_session',
+      'workshop_session',
+      'tuning_session',
+      'debug_session',
+      'test_session',
+      'other'
+    ])
   })
 })

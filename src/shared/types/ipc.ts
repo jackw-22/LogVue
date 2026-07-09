@@ -17,7 +17,7 @@ import type {
   SessionMetadata,
   SessionNode
 } from './session'
-import type { AdbStatus, HubLog } from './hublog'
+import type { AdbStatus, HubLog, HubTimeSample } from './hublog'
 import type { LogQueryRow, SessionQuery, SessionQueryResult } from './query'
 import type {
   HubLogRef,
@@ -26,6 +26,12 @@ import type {
   NewSessionImportRequest,
   NewSessionImportResult
 } from './import'
+import type {
+  FtcScoutEventSearchRequest,
+  FtcScoutEventSearchResult,
+  FtcScoutSyncRequest,
+  FtcScoutSyncResult
+} from './ftcscout'
 
 export interface AppInfo {
   appVersion: string
@@ -33,6 +39,12 @@ export interface AppInfo {
   chrome: string
   node: string
   platform: NodeJS.Platform
+}
+
+export interface ArchiveChangedEvent {
+  root: string
+  paths: string[]
+  reason: 'archive_changed'
 }
 
 export interface IpcApi {
@@ -46,6 +58,10 @@ export interface IpcApi {
   /** Native directory picker; returns the chosen path or null if cancelled. */
   'settings:pickArchiveRoot': () => Promise<string | null>
   'settings:setArchiveRoot': (path: string) => Promise<AppSettings>
+  'settings:setTeamNumber': (teamNumber: number | null) => Promise<AppSettings>
+  'settings:pickHubLogFolder': () => Promise<string | null>
+  'settings:setHubDataSource': (source: AppSettings['hubDataSource']) => Promise<AppSettings>
+  'settings:setHubLogFolder': (path: string | null) => Promise<AppSettings>
 
   // ── archive / sessions (disk-backed; source of truth) ──────
   /** The session tree beneath the archive root. */
@@ -53,6 +69,8 @@ export interface IpcApi {
   'archive:getSession': (path: string) => Promise<Session>
   /** The files physically inside a folder/session on disk — lets you see logs without importing. */
   'archive:listFiles': (path: string) => Promise<FolderFile[]>
+  /** Reveal a session file in the OS file manager. */
+  'archive:showFile': (path: string, filename: string) => Promise<void>
   'archive:createSession': (input: CreateSessionInput) => Promise<Session>
   'archive:updateMeta': (path: string, patch: Partial<SessionMetadata>) => Promise<Session>
   /** Write a `session.json` for a bare folder using discovery defaults (spec §4.2). */
@@ -71,6 +89,8 @@ export interface IpcApi {
   'adb:status': () => Promise<AdbStatus>
   /** List `.rlog` files on the hub with parsed metadata + import status (spec §7.2–7.3). */
   'adb:listHubLogs': () => Promise<HubLog[]>
+  /** Current Control Hub clock sampled over adb, with local-clock offset. */
+  'adb:getHubTime': () => Promise<HubTimeSample>
   /** Mark a remote hub log as ignored — hidden from the default view (spec §15). */
   'adb:ignoreHubLog': (entry: HubLogRef) => Promise<void>
   /** Reverse an ignore (spec §15). */
@@ -81,6 +101,12 @@ export interface IpcApi {
   'import:toSession': (req: ImportRequest) => Promise<ImportResult>
   /** Create a session from selected logs, then import them into it (spec §10). */
   'import:toNewSession': (req: NewSessionImportRequest) => Promise<NewSessionImportResult>
+
+  // ── FTCScout (online fetch + sqlite cache; spec competition workflow) ──
+  /** Search FTCScout events by name/code for the add-session dialog. */
+  'ftcscout:searchEvents': (req: FtcScoutEventSearchRequest) => Promise<FtcScoutEventSearchResult[]>
+  /** Sync team-specific official matches into an existing competition_event session. */
+  'ftcscout:syncEvent': (req: FtcScoutSyncRequest) => Promise<FtcScoutSyncResult>
 }
 
 export type IpcChannel = keyof IpcApi

@@ -7,6 +7,7 @@ import {
   useAdbStatus,
   useArchiveTree,
   useHubLogs,
+  useHubTime,
   useIgnoreHubLog,
   useImportToNewSession,
   useImportToSession,
@@ -15,7 +16,7 @@ import {
 } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
 import { guessAlliance } from '../lib/alliance'
-import { formatTimestamp } from '../lib/time'
+import { correctedHubTimestamp, formatHubOffset, formatTimestamp } from '../lib/time'
 import ImportDialog from './ImportDialog'
 
 /** Local YYYY-MM-DD, the name of the date-based session quick import targets. */
@@ -30,12 +31,16 @@ function todayKey(): string {
 export default function HubLogTable(): JSX.Element {
   const { data: settings } = useSettings()
   const { data: adb } = useAdbStatus()
-  const connected = !!adb?.connected
+  const sourceIsFolder = settings?.hubDataSource === 'folder'
+  const connected = sourceIsFolder ? !!settings?.hubLogFolder : !!adb?.connected
+  const sourceName = sourceIsFolder ? 'Folder Import' : 'Control Hub'
   const { data: logs, isLoading, isError, error } = useHubLogs(connected)
+  const { data: hubTime, isLoading: hubTimeLoading, isError: hubTimeError } = useHubTime(connected)
   const { data: tree } = useArchiveTree(true)
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showIgnored, setShowIgnored] = useState(false)
+  const [correctHubTime, setCorrectHubTime] = useState(true)
   const [dialog, setDialog] = useState<{ logs: HubLog[]; mode: 'existing' | 'new' } | null>(null)
 
   const ignore = useIgnoreHubLog()
@@ -51,7 +56,10 @@ export default function HubLogTable(): JSX.Element {
   )
   const ignoredCount = (logs ?? []).filter((l) => l.import_status.state === 'ignored').length
 
-  if (adb?.adbMissing) return <Notice title="adb not found">{ADB_NOT_FOUND_HINT}</Notice>
+  if (sourceIsFolder && !settings?.hubLogFolder) {
+    return <Notice title="No folder selected">Choose a hub log folder in Settings.</Notice>
+  }
+  if (!sourceIsFolder && adb?.adbMissing) return <Notice title="adb not found">{ADB_NOT_FOUND_HINT}</Notice>
   if (!connected) {
     return (
       <Notice title="No Control Hub connected">
@@ -60,12 +68,14 @@ export default function HubLogTable(): JSX.Element {
       </Notice>
     )
   }
-  if (isLoading) return <div className="details-empty">Reading logs from the hub…</div>
+  if (isLoading) return <div className="details-empty">Reading logs from {sourceIsFolder ? 'the folder' : 'the hub'}…</div>
   if (isError) {
     return <Notice title="Couldn’t read logs">{(error as Error)?.message ?? 'ADB command failed.'}</Notice>
   }
   if (!logs || logs.length === 0) {
-    return <Notice title="No .rlog files found">Nothing under the hub’s PsiKit log folder yet.</Notice>
+    return <Notice title="No .rlog files found">
+      {sourceIsFolder ? 'No .rlog files were found in the selected folder.' : 'Nothing under the hub’s PsiKit log folder yet.'}
+    </Notice>
   }
 
   const selectedLogs = visible.filter((l) => selected.has(l.remote_path))
@@ -121,7 +131,7 @@ export default function HubLogTable(): JSX.Element {
     <div className="hublogs">
       <div className="hublogs-head">
         <h3>
-          Control Hub logs <span className="muted small">({visible.length})</span>
+          {sourceName} <span className="muted small">({visible.length})</span>
         </h3>
         <div className="hublogs-actions">
           <button
@@ -156,6 +166,15 @@ export default function HubLogTable(): JSX.Element {
               Show ignored ({ignoredCount})
             </label>
           )}
+          <label className="show-ignored small" title="Apply the clock offset between this computer and the log source">
+            <input
+              type="checkbox"
+              checked={correctHubTime}
+              onChange={(e) => setCorrectHubTime(e.target.checked)}
+              disabled={hubTimeLoading || hubTimeError || !hubTime}
+            />
+            Correct log time {hubTime ? `(${formatHubOffset(hubTime.offsetMs)})` : hubTimeLoading ? '(checking...)' : ''}
+          </label>
         </div>
       </div>
 
@@ -179,6 +198,15 @@ export default function HubLogTable(): JSX.Element {
               <Row
                 key={log.remote_path}
                 log={log}
+                recorded={
+                  correctHubTime
+                    ? correctedHubTimestamp(
+                        log.parsed_timestamp,
+                        hubTime?.hubTimezoneOffsetMinutes ?? null,
+                        hubTime?.offsetMs ?? 0
+                      )
+                    : log.parsed_timestamp
+                }
                 tint={shade === 'tint'}
                 checked={selected.has(log.remote_path)}
                 onToggle={() => toggle(log.remote_path)}
@@ -213,6 +241,7 @@ export default function HubLogTable(): JSX.Element {
 
 interface RowProps {
   log: HubLog
+  recorded: string | null
   tint: boolean
   checked: boolean
   onToggle: () => void
@@ -224,6 +253,7 @@ interface RowProps {
 
 function Row({
   log,
+  recorded,
   tint,
   checked,
   onToggle,
@@ -245,7 +275,7 @@ function Row({
           {log.opmode ?? <span className="muted">—</span>}
         </span>
       </td>
-      <td className="mono">{formatTimestamp(log.parsed_timestamp)}</td>
+      <td className="mono">{formatTimestamp(recorded)}</td>
       <td className="num mono">{formatBytes(log.file_size_bytes)}</td>
       <td>
         <StatusBadge status={log.import_status} />
@@ -292,7 +322,7 @@ function StatusBadge({ status }: { status: ImportStatus }): JSX.Element {
 
 function Notice({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
   return (
-    <div className="hublogs">
+    <div className="hublogs hub-notice-wrap">
       <div className="callout hub-notice">
         <div>
           <strong>{title}</strong>

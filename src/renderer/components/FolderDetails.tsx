@@ -10,32 +10,26 @@ interface Props {
   path: string
   name: string
   displayName: string
-  /** True when this folder carries an explicit `container` marker (vs. a not-yet-recognised bare folder). */
-  isExplicitContainer: boolean
   onRecognise: () => void
-  onKeepAsFolder: () => void
   busy: boolean
 }
 
 /**
- * Lightweight view for a plain grouping folder (ARCHITECTURE §10.1): no session chrome,
- * just the recognise/keep choice. A bare folder with loose logs in it is nudged toward
- * becoming a session; an explicit container only offers "Recognise as session" to undo.
+ * Lightweight view for a bare folder before it is recognised as a general session.
+ * A bare folder with loose logs in it is nudged toward becoming a session.
  */
 export default function FolderDetails({
   path,
   name,
   displayName,
-  isExplicitContainer,
   onRecognise,
-  onKeepAsFolder,
   busy
 }: Props): JSX.Element {
   const { data: tree } = useArchiveTree(true)
   const { data: files } = useFolderFiles(path)
   const select = useAppStore((s) => s.select)
   const node = tree ? findNode(tree, path) : null
-  const looseLogs = !isExplicitContainer ? node?.logCount ?? 0 : 0
+  const looseLogs = node?.logCount ?? 0
   const childCount = node?.children.length ?? 0
 
   return (
@@ -49,29 +43,22 @@ export default function FolderDetails({
       </div>
 
       <div className="callout neutral">
-        {isExplicitContainer ? (
-          <p>
-            This is a folder, not a session. It groups{' '}
-            {childCount === 1 ? '1 item' : `${childCount} items`} and is excluded from
-            session filters and counts.
-          </p>
-        ) : looseLogs > 0 ? (
+        {looseLogs > 0 ? (
           <p>
             This folder isn’t a session yet and contains {formatLogCount(looseLogs)} — it
             looks like it should be one.
           </p>
         ) : (
-          <p>This folder isn’t a session. Keep it as a plain grouping folder, or recognise it as a session.</p>
+          <p>
+            This folder isn’t a session yet. Recognise it as a general session to include
+            {childCount > 0 ? ` its ${childCount === 1 ? 'child' : 'children'} ` : ' it '}
+            in the library.
+          </p>
         )}
         <div className="callout-actions">
           <button className="sm" onClick={onRecognise} disabled={busy}>
             Recognise as session
           </button>
-          {!isExplicitContainer && (
-            <button className="ghost sm" onClick={onKeepAsFolder} disabled={busy}>
-              Keep as folder
-            </button>
-          )}
         </div>
       </div>
 
