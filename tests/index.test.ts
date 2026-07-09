@@ -114,6 +114,6 @@ describe('collectIndexRows', () => {
   })
 
   it('returns empty rows for a missing root', () => {
-    expect(collectIndexRows(join(root, 'nope'))).toEqual({ sessions: [], files: [], tags: [] })
+    expect(collectIndexRows(join(root, 'nope'))).toEqual({ sessions: [], files: [], tags: [], fileMeta: [] })
   })
 })

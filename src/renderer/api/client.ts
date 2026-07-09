@@ -35,7 +35,8 @@ export const api = {
   },
   index: {
     query: (query: SessionQuery) => window.api.invoke('index:query', query),
-    queryLogs: (query: SessionQuery) => window.api.invoke('index:queryLogs', query)
+    queryLogs: (query: SessionQuery) => window.api.invoke('index:queryLogs', query),
+    librarySize: () => window.api.invoke('index:librarySize')
   },
   adb: {
     status: () => window.api.invoke('adb:status'),

@@ -5,6 +5,7 @@ import type { FileKind } from '@shared/types/session'
 import { useArchiveTree, useFolderFiles } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
 import { findNode } from '../lib/tree'
+import FileMetaChips from './FileMetaChips'
 
 interface Props {
   path: string
@@ -28,6 +29,8 @@ export default function FolderDetails({
   const { data: tree } = useArchiveTree(true)
   const { data: files } = useFolderFiles(path)
   const select = useAppStore((s) => s.select)
+  const showFileMeta = useAppStore((s) => s.showFileMeta)
+  const setShowFileMeta = useAppStore((s) => s.setShowFileMeta)
   const node = tree ? findNode(tree, path) : null
   const looseLogs = node?.logCount ?? 0
   const childCount = node?.children.length ?? 0
@@ -63,9 +66,19 @@ export default function FolderDetails({
       </div>
 
       <section>
-        <h3>
-          Files <span className="muted small">({files?.length ?? 0})</span>
-        </h3>
+        <div className="files-head">
+          <h3>
+            Files <span className="muted small">({files?.length ?? 0})</span>
+          </h3>
+          <label className="small muted meta-toggle">
+            <input
+              type="checkbox"
+              checked={showFileMeta}
+              onChange={(e) => setShowFileMeta(e.target.checked)}
+            />
+            Show metadata
+          </label>
+        </div>
         {!files || files.length === 0 ? (
           <p className="muted small">No loose files in this folder.</p>
         ) : (
@@ -75,6 +88,7 @@ export default function FolderDetails({
                 <span className="file-name">{f.filename}</span>
                 <span className="chip">{FILE_KIND_LABELS[f.kind as FileKind] ?? f.kind}</span>
                 <span className="muted small">{formatBytes(f.sizeBytes)}</span>
+                {showFileMeta && f.metadata && <FileMetaChips metadata={f.metadata} />}
               </li>
             ))}
           </ul>

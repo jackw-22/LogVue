@@ -898,11 +898,59 @@ section h3 {
 .file-list li {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 7px;
   padding: 0.5rem 0.7rem;
+}
+.files-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.meta-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  user-select: none;
+}
+/* RLOG-embedded metadata chips: a full-width second row inside the file row. */
+.file-meta {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* Chips are <button>s (click-to-copy), so undo the accent button base style. */
+button.chip.meta {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-family: var(--mono);
+  cursor: copy;
+}
+button.chip.meta:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.chip.meta .meta-key {
+  color: color-mix(in srgb, var(--muted) 65%, transparent);
+}
+button.chip.meta.warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
+}
+button.chip.meta.more {
+  cursor: pointer;
+  font-family: inherit;
 }
 .file-name {
   flex: 1;

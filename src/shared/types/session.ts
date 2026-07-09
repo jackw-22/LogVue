@@ -106,6 +106,8 @@ export interface FolderFile {
   sizeBytes: number | null
   /** True when the file is listed in the folder's `session.json` (imported/curated), not just loose on disk. */
   tracked: boolean
+  /** RLOG-embedded metadata (Logger.recordMetadata), decoded from the file head; null for non-logs or logs without any. */
+  metadata: Record<string, string> | null
 }
 
 /** Input for creating a new session folder. */

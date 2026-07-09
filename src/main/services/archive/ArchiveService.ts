@@ -11,6 +11,7 @@ import type {
 } from '@shared/types/session'
 import { INDEX_FILE, NOTES_FILE, RESERVED_NAMES, toFolderName, uniqueChildDir } from './paths'
 import { guessFileKind } from '../import/fileKind'
+import { extractRlogMetadata } from '../rlog/rlogMetadata'
 import { readMetadata, readMetadataOrDefault, writeMetadata } from './SessionStore'
 
 /** Count non-plumbing files in a folder, and how many look like logs. */
@@ -100,11 +101,15 @@ export function listFolderFiles(dir: string): FolderFile[] {
     } catch {
       sizeBytes = null
     }
+    const rlogMeta = name.toLowerCase().endsWith('.rlog')
+      ? extractRlogMetadata(join(dir, name))
+      : null
     out.push({
       filename: name,
       kind: trackedKind.get(name) ?? guessFileKind(name),
       sizeBytes,
-      tracked: trackedKind.has(name)
+      tracked: trackedKind.has(name),
+      metadata: rlogMeta && Object.keys(rlogMeta).length > 0 ? rlogMeta : null
     })
   }
   out.sort((a, b) => a.filename.localeCompare(b.filename))

@@ -20,6 +20,7 @@ const keys = {
   hubLogs: ['adb', 'hubLogs'] as const,
   query: (q: SessionQuery) => ['index', 'query', q] as const,
   logQuery: (q: SessionQuery) => ['index', 'queryLogs', q] as const,
+  librarySize: ['index', 'librarySize'] as const,
   ftcScoutEvents: (q: FtcScoutEventSearchRequest) => ['ftcscout', 'events', q] as const
 }
 
@@ -101,6 +102,11 @@ export function useLogQuery(query: SessionQuery, enabled = true) {
     enabled,
     placeholderData: (prev) => prev
   })
+}
+
+/** Total bytes of every indexed file — the library size pill. Fresh as of the last reindex. */
+export function useLibrarySize() {
+  return useQuery({ queryKey: keys.librarySize, queryFn: api.index.librarySize })
 }
 
 /** Open the native picker and persist the chosen archive root. */

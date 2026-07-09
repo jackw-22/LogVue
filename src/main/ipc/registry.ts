@@ -7,6 +7,7 @@ import { readNotes, writeNotes } from '../services/archive/SessionStore'
 import {
   ensureIndexBuilt,
   getIndexStore,
+  librarySizeBytes,
   queryLogs,
   querySessions,
   rebuild,
@@ -118,6 +119,7 @@ const handlers: Handlers = {
   'archive:rebuildIndex': async () => rebuild(getSettings().archiveRoot),
   'index:query': async (query) => querySessions(getSettings().archiveRoot, query),
   'index:queryLogs': async (query) => queryLogs(getSettings().archiveRoot, query),
+  'index:librarySize': async () => librarySizeBytes(getSettings().archiveRoot),
 
   // ── ADB / Control Hub ──
   'adb:status': async () => adb.getStatus(),

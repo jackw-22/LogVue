@@ -4,6 +4,7 @@ import type { SessionMetadata } from '@shared/types/session'
 import { INDEX_FILE, NOTES_FILE, RESERVED_NAMES } from '../archive/paths'
 import { readMetadataOrDefault } from '../archive/SessionStore'
 import { guessFileKind } from '../import/fileKind'
+import { extractRlogMetadata } from '../rlog/rlogMetadata'
 import type { IndexStore } from './IndexStore'
 
 /** One row of the `sessions` table — a flattened, queryable projection of `session.json`. */
@@ -37,10 +38,19 @@ export interface TagRow {
   tag: string
 }
 
+/** One row of the `file_metadata` table — a metadata entry decoded from an .rlog's head. */
+export interface FileMetadataRow {
+  session_id: string
+  filename: string
+  key: string
+  value: string
+}
+
 export interface IndexRows {
   sessions: SessionRow[]
   files: FileRow[]
   tags: TagRow[]
+  fileMeta: FileMetadataRow[]
 }
 
 /** Flatten a session's metadata into the row the `sessions` table stores. */
@@ -106,6 +116,23 @@ export function collectFileRows(dir: string, m: SessionMetadata): FileRow[] {
   return [...rowsByName.values()]
 }
 
+/**
+ * Metadata rows for every `.rlog` physically present in `dir`, decoded from the
+ * file heads. Unreadable/foreign files simply contribute no rows.
+ */
+export function collectFileMetadataRows(dir: string, files: FileRow[]): FileMetadataRow[] {
+  const out: FileMetadataRow[] = []
+  for (const f of files) {
+    if (!f.filename.toLowerCase().endsWith('.rlog')) continue
+    const meta = extractRlogMetadata(join(dir, f.filename))
+    if (!meta) continue
+    for (const [key, value] of Object.entries(meta)) {
+      out.push({ session_id: f.session_id, filename: f.filename, key, value })
+    }
+  }
+  return out
+}
+
 /** Deduped, blank-stripped (session, tag) rows for the tags table. */
 export function toTagRows(sessionId: string, m: SessionMetadata): TagRow[] {
   const seen = new Set<string>()
@@ -121,9 +148,11 @@ export function toTagRows(sessionId: string, m: SessionMetadata): TagRow[] {
 
 function walk(dir: string, out: IndexRows): void {
   const { metadata } = readMetadataOrDefault(dir)
+  const files = collectFileRows(dir, metadata)
   out.sessions.push(toSessionRow(dir, metadata))
-  out.files.push(...collectFileRows(dir, metadata))
+  out.files.push(...files)
   out.tags.push(...toTagRows(metadata.session_id, metadata))
+  out.fileMeta.push(...collectFileMetadataRows(dir, files))
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) walk(join(dir, entry.name), out)
   }
@@ -136,7 +165,7 @@ function walk(dir: string, out: IndexRows): void {
  * and flattens it into `sessions`/`files` rows.
  */
 export function collectIndexRows(root: string): IndexRows {
-  const out: IndexRows = { sessions: [], files: [], tags: [] }
+  const out: IndexRows = { sessions: [], files: [], tags: [], fileMeta: [] }
   if (!root || !existsSync(root)) return out
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     if (entry.isDirectory()) walk(join(root, entry.name), out)

@@ -87,6 +87,8 @@ export interface IpcApi {
   'index:query': (query: SessionQuery) => Promise<SessionQueryResult>
   /** Log-level filter/search — every imported log matching the query, newest-first (quick-find). */
   'index:queryLogs': (query: SessionQuery) => Promise<LogQueryRow[]>
+  /** Total bytes of every indexed file — the library size pill on the tree root. */
+  'index:librarySize': () => Promise<number>
 
   // ── ADB / Control Hub (read-only; spec §7) ─────────────────
   /** Connection status from `adb devices` (spec §7.1). */

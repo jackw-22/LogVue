@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SessionNode } from '@shared/types/session'
 import { formatLogCount } from '@shared/format/match'
-import { useArchiveTree } from '../api/hooks'
+import { formatBytes } from '@shared/format/bytes'
+import { useArchiveTree, useLibrarySize } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
 import { allianceClass } from '../lib/alliance'
 import { normalizePathKey, pathsEqual } from '../lib/tree'
@@ -19,6 +20,7 @@ function containsPath(node: SessionNode, path: string | null): boolean {
 function RootRow({ logCount }: { logCount: number }): JSX.Element {
   const selectedPath = useAppStore((s) => s.selectedPath)
   const select = useAppStore((s) => s.select)
+  const { data: sizeBytes } = useLibrarySize()
 
   return (
     <div
@@ -28,6 +30,11 @@ function RootRow({ logCount }: { logCount: number }): JSX.Element {
     >
       <span className="tree-root-icon">⌂</span>
       <span className="tree-name">Library</span>
+      {sizeBytes != null && sizeBytes > 0 && (
+        <span className="chip count" title="Total size of indexed files">
+          {formatBytes(sizeBytes)}
+        </span>
+      )}
       <span className="chip count">{formatLogCount(logCount)}</span>
     </div>
   )

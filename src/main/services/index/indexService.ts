@@ -6,7 +6,13 @@ import type { LogQueryRow, SessionQuery, SessionQueryResult } from '@shared/type
 import type { FileKind, SessionType } from '@shared/types/session'
 import { parseRlogFilename } from '../adb/rlogFilename'
 import { IndexStore } from './IndexStore'
-import { collectFileRows, rebuildIndex, toSessionRow, toTagRows } from './rebuild'
+import {
+  collectFileMetadataRows,
+  collectFileRows,
+  rebuildIndex,
+  toSessionRow,
+  toTagRows
+} from './rebuild'
 
 /**
  * Owns the single open `IndexStore` for the current archive root. The DB file lives
@@ -43,10 +49,12 @@ export function reindexSession(root: string | null | undefined, path: string): v
   const store = getIndexStore(root)
   if (!store) return
   const { metadata } = readMetadataOrDefault(path)
+  const files = collectFileRows(path, metadata)
   store.indexSession(
     toSessionRow(path, metadata),
-    collectFileRows(path, metadata),
-    toTagRows(metadata.session_id, metadata)
+    files,
+    toTagRows(metadata.session_id, metadata),
+    collectFileMetadataRows(path, files)
   )
 }
 
@@ -94,6 +102,11 @@ export function queryLogs(root: string | null | undefined, query: SessionQuery):
     if (b.recorded) return 1
     return a.filename.localeCompare(b.filename)
   })
+}
+
+/** Total bytes of every indexed file (0 when no index is open). Fresh as of the last reindex. */
+export function librarySizeBytes(root: string | null | undefined): number {
+  return getIndexStore(root)?.totalFileSizeBytes() ?? 0
 }
 
 function emptyFacets(): SessionQueryResult['facets'] {

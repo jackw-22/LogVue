@@ -372,6 +372,8 @@ sessions(session_id PK, path, session_type, display_name, event_code,
 files(id PK, session_id FK, filename, kind, remote_path, original_filename,
       file_size_bytes, imported_at);
 session_tags(session_id FK, tag, PK(session_id, tag));   -- derived; "tagged X" join
+file_metadata(session_id FK, filename, key, value,       -- derived; RLOG-embedded
+              PK(session_id, filename, key));            -- Logger.recordMetadata k/v
 ignored_hublogs(remote_path PK, filename, file_size_bytes, ignored_at);
 ftcscout_cache(event_code, season, payload_json, last_synced);
 ```
@@ -381,11 +383,17 @@ Everything here is derivable from disk. Filters (spec §12) become indexed queri
 teleop"). Search examples in §12.2 are all expressible over these tables. The pure
 `index/query.ts` (`buildSessionQuery`) turns a `SessionQuery` into a fully
 parametrised WHERE body; `IndexStore.querySessions`/`facets` execute it and the
-whole-archive facet counts. `session_tags` is a *derived* table (rebuilt from disk
-alongside `sessions`/`files`), so `INDEX_SCHEMA_VERSION` is bumped to **2** — a stale
-index drops and repopulates the derived tables on next open (§6.2). Metadata edits
+whole-archive facet counts. `session_tags` and `file_metadata` are *derived* tables
+(rebuilt from disk alongside `sessions`/`files`) — a stale `INDEX_SCHEMA_VERSION`
+drops and repopulates the derived tables on next open (§6.2). Metadata edits
 (`updateMeta`/`createSession`/`promoteFolder`) reindex the single touched session so
 filters stay in step without a full rescan.
+
+`file_metadata` holds the key/value map PsiKit's `Logger.recordMetadata()` embeds in
+each `.rlog` (`RealMetadata/*` string records in the first log cycle — e.g. GitSHA,
+GitBranch, OpMode name). `rlog/rlogMetadata.ts` decodes it from the *head* of the
+file only (128 KiB cap), at import (`reindexSession`) and full rebuild; the log file
+itself is the source of truth, so the table needs no `session.json` involvement.
 
 ---
 

@@ -39,6 +39,9 @@ interface AppState {
   setShade: (shade: ShadeMode) => void
   dashboardMode: DashboardMode
   setDashboardMode: (dashboardMode: DashboardMode) => void
+  /** Show RLOG-embedded metadata chips in file lists (applies to all sessions). */
+  showFileMeta: boolean
+  setShowFileMeta: (showFileMeta: boolean) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -57,7 +60,12 @@ export const useAppStore = create<AppState>((set) => ({
   shade: 'stripe',
   setShade: (shade) => set({ shade }),
   dashboardMode: 'flat',
-  setDashboardMode: (dashboardMode) => set({ dashboardMode })
+  setDashboardMode: (dashboardMode) => set({ dashboardMode }),
+  showFileMeta: globalThis.localStorage?.getItem('logvue.showFileMeta') === '1',
+  setShowFileMeta: (showFileMeta) => {
+    globalThis.localStorage?.setItem('logvue.showFileMeta', showFileMeta ? '1' : '0')
+    set({ showFileMeta })
+  }
 }))
 
 /** The quick-find state as a structured index query (shared by dashboard + hub view). */

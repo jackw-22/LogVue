@@ -22,6 +22,7 @@ import {
 import { useAppStore } from '../stores/appStore'
 import { allianceClass, kindBadge } from '../lib/alliance'
 import { formatTimestamp } from '../lib/time'
+import FileMetaChips from './FileMetaChips'
 import MatchInfoEditor from './MatchInfoEditor'
 import MatchList from './MatchList'
 import FolderDetails from './FolderDetails'
@@ -60,6 +61,8 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
   const showFolder = useShowFolder()
   const select = useAppStore((s) => s.select)
   const setView = useAppStore((s) => s.setView)
+  const showFileMeta = useAppStore((s) => s.showFileMeta)
+  const setShowFileMeta = useAppStore((s) => s.setShowFileMeta)
   const sourceName = settings?.hubDataSource === 'folder' ? 'Folder Import' : 'Control Hub'
 
   const [name, setName] = useState('')
@@ -222,9 +225,19 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
       )}
 
       <section>
-        <h3>
-          Files <span className="muted small">({files.length})</span>
-        </h3>
+        <div className="files-head">
+          <h3>
+            Files <span className="muted small">({files.length})</span>
+          </h3>
+          <label className="small muted meta-toggle">
+            <input
+              type="checkbox"
+              checked={showFileMeta}
+              onChange={(e) => setShowFileMeta(e.target.checked)}
+            />
+            Show metadata
+          </label>
+        </div>
         {files.length === 0 ? (
           <div className="empty-files">
             <span>No files in this session folder yet.</span>
@@ -261,6 +274,7 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
                   >
                     Open
                   </button>
+                  {showFileMeta && f.metadata && <FileMetaChips metadata={f.metadata} />}
                 </li>
               )
             })}

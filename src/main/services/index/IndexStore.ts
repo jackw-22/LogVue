@@ -7,7 +7,7 @@ import type { FacetCounts, SessionQuery, SessionQueryRow } from '@shared/types/q
 import type { SessionType, FileKind } from '@shared/types/session'
 import { LOG_KINDS } from '@shared/constants/fileKinds'
 import { DERIVED_TABLES, INDEX_SCHEMA_VERSION, SCHEMA_SQL } from './schema'
-import type { FileRow, IndexRows, SessionRow, TagRow } from './rebuild'
+import type { FileMetadataRow, FileRow, IndexRows, SessionRow, TagRow } from './rebuild'
 import { buildSessionQuery } from './query'
 import type { ImportIdentity } from '../import/identity'
 
@@ -31,6 +31,9 @@ const INSERT_FILE_SQL = `INSERT INTO files
     (@session_id, @filename, @kind, @remote_path, @original_filename, @file_size_bytes, @imported_at)`
 
 const INSERT_TAG_SQL = `INSERT OR IGNORE INTO session_tags (session_id, tag) VALUES (@session_id, @tag)`
+
+const INSERT_FILE_META_SQL = `INSERT OR REPLACE INTO file_metadata (session_id, filename, key, value)
+   VALUES (@session_id, @filename, @key, @value)`
 
 /**
  * The local index (ARCHITECTURE.md §8) — the *only* module that touches the native
@@ -74,13 +77,16 @@ export class IndexStore {
     const insertSession = this.db.prepare(INSERT_SESSION_SQL)
     const insertFile = this.db.prepare(INSERT_FILE_SQL)
     const insertTag = this.db.prepare(INSERT_TAG_SQL)
+    const insertMeta = this.db.prepare(INSERT_FILE_META_SQL)
     const replace = this.db.transaction((data: IndexRows) => {
+      this.db.exec('DELETE FROM file_metadata')
       this.db.exec('DELETE FROM session_tags')
       this.db.exec('DELETE FROM files')
       this.db.exec('DELETE FROM sessions')
       for (const s of data.sessions) insertSession.run(s)
       for (const f of data.files) insertFile.run(f)
       for (const t of data.tags) insertTag.run(t)
+      for (const m of data.fileMeta) insertMeta.run(m)
     })
     replace(rows)
   }
@@ -90,18 +96,27 @@ export class IndexStore {
    * replace just that session's file rows, so a hub log's import status flips without
    * a full rescan. The `files` change is bounded to one `session_id`.
    */
-  indexSession(session: SessionRow, files: FileRow[], tags: TagRow[] = []): void {
+  indexSession(
+    session: SessionRow,
+    files: FileRow[],
+    tags: TagRow[] = [],
+    fileMeta: FileMetadataRow[] = []
+  ): void {
     const insertSession = this.db.prepare(INSERT_SESSION_SQL)
     const insertFile = this.db.prepare(INSERT_FILE_SQL)
     const insertTag = this.db.prepare(INSERT_TAG_SQL)
+    const insertMeta = this.db.prepare(INSERT_FILE_META_SQL)
     const deleteFiles = this.db.prepare('DELETE FROM files WHERE session_id = ?')
     const deleteTags = this.db.prepare('DELETE FROM session_tags WHERE session_id = ?')
+    const deleteMeta = this.db.prepare('DELETE FROM file_metadata WHERE session_id = ?')
     const write = this.db.transaction(() => {
       insertSession.run(session)
       deleteFiles.run(session.session_id)
       deleteTags.run(session.session_id)
+      deleteMeta.run(session.session_id)
       for (const f of files) insertFile.run(f)
       for (const t of tags) insertTag.run(t)
+      for (const m of fileMeta) insertMeta.run(m)
     })
     write()
   }
@@ -373,6 +388,14 @@ export class IndexStore {
           GROUP BY tag ORDER BY count DESC, value`
       )
     }
+  }
+
+  /** Total bytes of every indexed file — the library size shown on the tree root row. */
+  totalFileSizeBytes(): number {
+    const row = this.db
+      .prepare('SELECT COALESCE(SUM(file_size_bytes), 0) AS n FROM files')
+      .get() as { n: number }
+    return row.n
   }
 
   /** Row counts for the derived tables (what `archive:rebuildIndex` reports back). */
