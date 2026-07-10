@@ -15,12 +15,11 @@ import {
 } from '../services/index/indexService'
 import { createAdbClient } from '../services/adb/createAdbClient'
 import { listHubLogs } from '../services/adb/hublogs'
-import { importToSession } from '../services/import/ImportService'
 import { FtcScoutClient } from '../services/ftcscout/FtcScoutClient'
 import { syncFtcScoutEvent } from '../services/ftcscout/syncEvent'
 import { startArchiveWatcher } from '../services/watcher/Watcher'
 import { listTasks, startTask } from '../services/tasks/TaskService'
-import { runImportTask, runNewSessionImportTask } from '../services/import/importTask'
+import { runImportTask, runNewSessionImportTask, runSingleImportTask } from '../services/import/importTask'
 
 /** One hub-log source wrapper for the app's lifetime; refreshed when source settings change. */
 let adb = createAdbClient(getSettings())
@@ -167,9 +166,9 @@ const handlers: Handlers = {
   },
 
   // ── import ──
-  // Single-file import stays untasked: it's the duplicate-resolution path, already
-  // driven from a modal that shows its own result.
-  'import:toSession': async (req) => importToSession(adb, getSettings().archiveRoot, req),
+  // Single-file imports use the same activity task as batch imports, so quick imports
+  // and suggested-log imports have visible progress too.
+  'import:toSession': async (req) => runSingleImportTask(adb, getSettings().archiveRoot, req),
   'import:batchToSession': async (req) => runImportTask(adb, getSettings().archiveRoot, req),
   'import:toNewSession': async (req) => runNewSessionImportTask(adb, getSettings().archiveRoot, req),
 

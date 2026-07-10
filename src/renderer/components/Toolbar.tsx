@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import type { AppSettings } from '@shared/types/session'
-import { useAdbStatus, usePickArchiveRoot } from '../api/hooks'
+import { useAdbStatus, usePickArchiveRoot, useRebuildIndex } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
 
 export default function Toolbar({ settings, onNewTopLevel, onSettings }: Props): JSX.Element {
   const pick = usePickArchiveRoot()
+  const rebuild = useRebuildIndex()
   const qc = useQueryClient()
   const view = useAppStore((s) => s.view)
   const setView = useAppStore((s) => s.setView)
@@ -74,9 +75,10 @@ export default function Toolbar({ settings, onNewTopLevel, onSettings }: Props):
         <>
           <button
             className="ghost sm"
-            onClick={() => qc.invalidateQueries({ queryKey: ['archive', 'tree'] })}
+            onClick={() => rebuild.mutate()}
+            disabled={rebuild.isPending}
           >
-            Rescan
+            {rebuild.isPending ? 'Rescanning…' : 'Rescan'}
           </button>
           <button className="sm" onClick={onNewTopLevel}>
             + New session

@@ -11,7 +11,7 @@ import type {
 import type { AdbLike } from '../adb/AdbClient'
 import { readMetadataOrDefault } from '../archive/SessionStore'
 import { startTask, type TaskHandle } from '../tasks/TaskService'
-import { importBatchToSession, importToNewSession, type ImportHooks } from './ImportService'
+import { importBatchToSession, importToNewSession, importToSession, type ImportHooks } from './ImportService'
 
 /**
  * Wraps a batch import in an activity task (spec §7.4 + the progress bubble). Byte
@@ -91,6 +91,31 @@ export async function runImportTask(
     attachRetries(handle, req.logs, req.sessionPath)
     finish(handle, results, label, req.sessionPath)
     return results
+  } catch (err) {
+    handle.fail(err)
+    throw err
+  }
+}
+
+/** Import one log while preserving the single-import error semantics. */
+export async function runSingleImportTask(
+  adb: AdbLike,
+  root: string | null | undefined,
+  req: ImportRequest
+): Promise<ImportResult> {
+  const label = sessionLabel(req.sessionPath)
+  const handle = startTask({
+    kind: 'import',
+    title: `Importing to ${label}`,
+    subtitle: 'ADB pull · Control Hub',
+    targetPath: req.sessionPath
+  })
+  handle.setItems(itemsFor([req]))
+
+  try {
+    const result = await importToSession(adb, root, req, hooksFor(handle, [req]))
+    finish(handle, [result], label, req.sessionPath)
+    return result
   } catch (err) {
     handle.fail(err)
     throw err

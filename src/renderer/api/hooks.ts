@@ -128,6 +128,18 @@ export function usePickArchiveRoot() {
   })
 }
 
+/** Explicitly rebuild the disposable index from the archive on disk. */
+export function useRebuildIndex() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.archive.rebuildIndex,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['archive'] })
+      qc.invalidateQueries({ queryKey: ['index'] })
+    }
+  })
+}
+
 export function useSetTeamNumber() {
   const qc = useQueryClient()
   return useMutation({

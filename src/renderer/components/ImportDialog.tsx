@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { SELECTABLE_SESSION_TYPES, SESSION_TYPE_LABELS } from '@shared/constants/sessionTypes'
 import type { SessionType, SessionNode } from '@shared/types/session'
 import type { HubLog, HubTimeSample } from '@shared/types/hublog'
-import type { HubLogRef, ImportResult } from '@shared/types/import'
+import type { HubLogRef } from '@shared/types/import'
 import { useArchiveTree, useImportBatchToSession, useImportToNewSession } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
 import { correctedHubTimestamp } from '../lib/time'
@@ -19,7 +19,6 @@ interface Props {
 }
 
 type Mode = 'existing' | 'new'
-type Entry = { log: HubLog; result: ImportResult }
 
 /** Flattened tree row for the session picker. */
 interface FlatNode {
@@ -50,7 +49,7 @@ function toRef(log: HubLog, correctHubTime: boolean, hubTime: HubTimeSample | un
 /**
  * Import the selected hub logs into a session (spec §7.4, §9.3, §10). Two targets:
  * an existing session, or a freshly-created one ("Create session from selected").
- * On a duplicate (spec §14) the import is held and the user can force a copy.
+ * Once submitted, the dialog closes and the activity toast reports progress and results.
  */
 export default function ImportDialog({
   logs,
@@ -69,59 +68,51 @@ export default function ImportDialog({
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState<SessionType>('general_session')
   const [newParent, setNewParent] = useState(archiveRoot)
-  const [entries, setEntries] = useState<Entry[] | null>(null)
 
   const importBatch = useImportBatchToSession()
   const importNew = useImportToNewSession()
   const select = useAppStore((s) => s.select)
 
   const running = importBatch.isPending || importNew.isPending
-  const duplicates = entries?.filter((e) => e.result.status === 'duplicate') ?? []
-
   /**
    * Import every selected log into `targetPath`. The loop runs in main so the whole
    * batch shows up as one activity toast; results come back one per log, in order.
    */
-  async function importAllInto(path: string, force: boolean, subset = logs): Promise<Entry[]> {
-    const results = await importBatch.mutateAsync({
+  async function importAllInto(path: string, force: boolean, subset = logs): Promise<void> {
+    await importBatch.mutateAsync({
       sessionPath: path,
       logs: subset.map((log) => toRef(log, correctHubTime, hubTime)),
       force
     })
-    return results.map((result, i) => ({ log: subset[i], result }))
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (mode === 'existing') {
       if (!targetPath) return
-      setEntries(await importAllInto(targetPath, false))
+      onImported()
+      onClose()
+      try {
+        await importAllInto(targetPath, false)
+      } catch {
+        // The activity toast owns progress and failure feedback after the dialog closes.
+      }
     } else {
       if (!newName.trim()) return
-      const res = await importNew.mutateAsync({
-        parentPath: newParent,
-        displayName: newName.trim(),
-        sessionType: newType,
-        logs: logs.map((log) => toRef(log, correctHubTime, hubTime))
-      })
-      select(res.session.path)
-      // res.results is one-per-log in request order (spec §10 batch import).
-      setEntries(res.results.map((result, i) => ({ log: logs[i], result })))
+      onImported()
+      onClose()
+      try {
+        const res = await importNew.mutateAsync({
+          parentPath: newParent,
+          displayName: newName.trim(),
+          sessionType: newType,
+          logs: logs.map((log) => toRef(log, correctHubTime, hubTime))
+        })
+        select(res.session.path)
+      } catch {
+        // The activity toast owns progress and failure feedback after the dialog closes.
+      }
     }
-    onImported()
-  }
-
-  /** Re-run just the held duplicates, forcing a copy (spec §14 "Import another copy"). */
-  async function forceDuplicates() {
-    const forced = await importAllInto(
-      targetPath,
-      true,
-      duplicates.map((d) => d.log)
-    )
-    setEntries((prev) =>
-      (prev ?? []).map((e) => forced.find((f) => f.log.remote_path === e.log.remote_path) ?? e)
-    )
-    onImported()
   }
 
   return (
@@ -137,130 +128,84 @@ export default function ImportDialog({
           ))}
         </ul>
 
-        {entries ? (
-          <Results entries={entries} />
+        <div className="seg" role="tablist">
+          <button
+            type="button"
+            className={`seg-btn ${mode === 'existing' ? 'active' : ''}`}
+            onClick={() => setMode('existing')}
+          >
+            Into existing session
+          </button>
+          <button
+            type="button"
+            className={`seg-btn ${mode === 'new' ? 'active' : ''}`}
+            onClick={() => setMode('new')}
+          >
+            Into a new session
+          </button>
+        </div>
+
+        {mode === 'existing' ? (
+          <label>
+            Session
+            <select value={targetPath} onChange={(e) => setTargetPath(e.target.value)} autoFocus>
+              <option value="">Choose a session…</option>
+              {flat.map((n) => (
+                <option key={n.path} value={n.path}>
+                  {'  '.repeat(n.depth)}
+                  {n.label}
+                </option>
+              ))}
+            </select>
+          </label>
         ) : (
           <>
-            <div className="seg" role="tablist">
-              <button
-                type="button"
-                className={`seg-btn ${mode === 'existing' ? 'active' : ''}`}
-                onClick={() => setMode('existing')}
-              >
-                Into existing session
-              </button>
-              <button
-                type="button"
-                className={`seg-btn ${mode === 'new' ? 'active' : ''}`}
-                onClick={() => setMode('new')}
-              >
-                Into a new session
-              </button>
-            </div>
-
-            {mode === 'existing' ? (
-              <label>
-                Session
-                <select value={targetPath} onChange={(e) => setTargetPath(e.target.value)} autoFocus>
-                  <option value="">Choose a session…</option>
-                  {flat.map((n) => (
-                    <option key={n.path} value={n.path}>
-                      {'  '.repeat(n.depth)}
-                      {n.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <>
-                <label>
-                  Name
-                  <input
-                    autoFocus
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="e.g. 2026-07-04 Drivebase tuning"
-                  />
-                </label>
-                <label>
-                  Type
-                  <select value={newType} onChange={(e) => setNewType(e.target.value as SessionType)}>
-                    {SELECTABLE_SESSION_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {SESSION_TYPE_LABELS[t]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Under
-                  <select value={newParent} onChange={(e) => setNewParent(e.target.value)}>
-                    <option value={archiveRoot}>Library</option>
-                    {flat.map((n) => (
-                      <option key={n.path} value={n.path}>
-                        {'  '.repeat(n.depth)}
-                        {n.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
-            )}
+            <label>
+              Name
+              <input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="e.g. 2026-07-04 Drivebase tuning"
+              />
+            </label>
+            <label>
+              Type
+              <select value={newType} onChange={(e) => setNewType(e.target.value as SessionType)}>
+                {SELECTABLE_SESSION_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {SESSION_TYPE_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Under
+              <select value={newParent} onChange={(e) => setNewParent(e.target.value)}>
+                <option value={archiveRoot}>Library</option>
+                {flat.map((n) => (
+                  <option key={n.path} value={n.path}>
+                    {'  '.repeat(n.depth)}
+                    {n.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </>
         )}
 
         <div className="modal-actions">
-          {entries ? (
-            <>
-              {duplicates.length > 0 && (
-                <button type="button" className="ghost" onClick={forceDuplicates} disabled={running}>
-                  {running ? 'Importing…' : `Import ${duplicates.length} copy(ies) anyway`}
-                </button>
-              )}
-              <button type="button" onClick={onClose}>
-                Done
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" className="ghost" onClick={onClose}>
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={running || (mode === 'existing' ? !targetPath : !newName.trim())}
-              >
-                {running ? 'Importing…' : 'Import'}
-              </button>
-            </>
-          )}
+          <button type="button" className="ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={running || (mode === 'existing' ? !targetPath : !newName.trim())}
+          >
+            {running ? 'Importing…' : 'Import'}
+          </button>
         </div>
       </form>
     </div>
-  )
-}
-
-function Results({ entries }: { entries: Entry[] }): JSX.Element {
-  return (
-    <ul className="import-results">
-      {entries.map(({ log, result }) => (
-        <li key={log.remote_path}>
-          <span className="mono small filename">{log.filename}</span>
-          {result.status === 'imported' ? (
-            <span className="pill imported" title={result.session.path}>
-              ✓ {result.session.metadata.display_name}
-            </span>
-          ) : result.status === 'duplicate' ? (
-            <span className="pill new" title={result.existing.map((e) => e.sessionPath).join('\n')}>
-              Already in {result.existing[0]?.sessionLabel ?? 'library'}
-            </span>
-          ) : (
-            <span className="pill failed" title={result.error}>
-              ✕ {result.error}
-            </span>
-          )}
-        </li>
-      ))}
-    </ul>
   )
 }
