@@ -1,11 +1,10 @@
-import { join } from 'path'
 import { existsSync } from 'fs'
-import { INDEX_FILE } from '../archive/paths'
 import { readMetadataOrDefault } from '../archive/SessionStore'
 import type { LogQueryRow, SessionQuery, SessionQueryResult } from '@shared/types/query'
 import type { FileKind, SessionType } from '@shared/types/session'
 import { parseRlogFilename } from '../adb/rlogFilename'
 import { IndexStore } from './IndexStore'
+import { ensureIndexLocation } from './indexPaths'
 import {
   collectFileMetadataRows,
   collectFileRows,
@@ -16,21 +15,17 @@ import {
 
 /**
  * Owns the single open `IndexStore` for the current archive root. The DB file lives
- * at `<archiveRoot>/index.sqlite` (RESERVED, so the scanner skips it). Reopens when
- * the root changes; the index is disposable, so we never migrate data across roots.
+ * at `<archiveRoot>/.logvue/index.sqlite`; the app-owned directory is excluded from
+ * archive scans. Reopens when the root changes.
  */
 let current: { root: string; store: IndexStore } | null = null
-
-function dbPath(root: string): string {
-  return join(root, INDEX_FILE)
-}
 
 /** Get (opening if needed) the index store bound to `root`, or null when no root is set. */
 export function getIndexStore(root: string | null | undefined): IndexStore | null {
   if (!root || !existsSync(root)) return null
   if (current && current.root === root) return current.store
   current?.store.close()
-  current = { root, store: new IndexStore(dbPath(root)) }
+  current = { root, store: new IndexStore(ensureIndexLocation(root)) }
   return current.store
 }
 

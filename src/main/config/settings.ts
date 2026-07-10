@@ -7,7 +7,8 @@ const DEFAULTS: AppSettings = {
   archiveRoot: null,
   teamNumber: null,
   hubDataSource: 'adb',
-  hubLogFolder: null
+  hubLogFolder: null,
+  confirmDeletePopulatedSessions: true
 }
 
 function settingsPath(): string {

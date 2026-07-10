@@ -38,7 +38,7 @@ const INSERT_FILE_META_SQL = `INSERT OR REPLACE INTO file_metadata (session_id, 
 /**
  * The local index (ARCHITECTURE.md §8) — the *only* module that touches the native
  * `better-sqlite3` binary. Everything it holds is derivable from disk, so it's safe
- * to delete `index.sqlite` and rebuild (§4). Keeping the native dependency isolated
+ * to delete `.logvue/index.sqlite` and rebuild (§4). Keeping the native dependency isolated
  * here means the disk → rows projection (`rebuild.collectIndexRows`) stays unit-
  * testable under Vitest without an Electron-ABI rebuild of the binary.
  */

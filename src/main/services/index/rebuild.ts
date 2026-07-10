@@ -157,7 +157,7 @@ function walk(dir: string, out: IndexRows): void {
   out.tags.push(...toTagRows(metadata.session_id, metadata))
   out.fileMeta.push(...collectFileMetadataRows(dir, files))
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) walk(join(dir, entry.name), out)
+    if (entry.isDirectory() && !RESERVED_NAMES.has(entry.name)) walk(join(dir, entry.name), out)
   }
 }
 
@@ -171,7 +171,7 @@ export function collectIndexRows(root: string): IndexRows {
   const out: IndexRows = { sessions: [], files: [], tags: [], fileMeta: [] }
   if (!root || !existsSync(root)) return out
   for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (entry.isDirectory()) walk(join(root, entry.name), out)
+    if (entry.isDirectory() && !RESERVED_NAMES.has(entry.name)) walk(join(root, entry.name), out)
   }
   return out
 }

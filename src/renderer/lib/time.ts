@@ -34,7 +34,7 @@ export function formatRelative(ts: string): string {
 /** Show recent timestamps as age, otherwise the normal absolute timestamp. */
 export function formatRecentTimestamp(
   ts: string | null | undefined,
-  thresholdMs = 8 * 60 * 60 * 1000,
+  thresholdMs = 2 * 60 * 60 * 1000,
   nowMs = Date.now()
 ): string {
   if (!ts) return formatTimestamp(ts)
@@ -49,7 +49,8 @@ function formatRelativeFromMs(ageMs: number): string {
   const mins = Math.floor(ageMs / 60_000)
   if (mins < 1) return 'just now'
   if (mins < 60) return `${mins}m ago`
-  return `${Math.floor(mins / 60)}h ago`
+  const hours = Math.floor(mins / 60)
+  return `${hours}h ${mins % 60}m ago`
 }
 
 export function correctedTimestamp(ts: string | null | undefined, offsetMs: number): string | null {

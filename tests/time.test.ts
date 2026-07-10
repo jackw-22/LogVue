@@ -18,14 +18,14 @@ describe('parseTimestampMs', () => {
 describe('formatRecentTimestamp', () => {
   const now = Date.parse('2026-07-10T12:00:00.000Z')
 
-  it('formats logs newer than eight hours as relative age', () => {
+  it('formats logs newer than two hours as relative age', () => {
     expect(formatRecentTimestamp('2026-07-10T11:59:30.000Z', undefined, now)).toBe('just now')
     expect(formatRecentTimestamp('2026-07-10T11:15:00.000Z', undefined, now)).toBe('45m ago')
-    expect(formatRecentTimestamp('2026-07-10T05:01:00.000Z', undefined, now)).toBe('6h ago')
+    expect(formatRecentTimestamp('2026-07-10T10:01:00.000Z', undefined, now)).toBe('1h 59m ago')
   })
 
-  it('uses the normal timestamp at eight hours or older', () => {
-    expect(formatRecentTimestamp('2026-07-10T04:00:00.000Z', undefined, now)).toBe('2026-07-10 04:00:00')
+  it('uses the normal timestamp at two hours or older', () => {
+    expect(formatRecentTimestamp('2026-07-10T10:00:00.000Z', undefined, now)).toBe('2026-07-10 10:00:00')
   })
 
   it('uses the normal timestamp for future or unparseable values', () => {

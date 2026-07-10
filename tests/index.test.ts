@@ -116,4 +116,14 @@ describe('collectIndexRows', () => {
   it('returns empty rows for a missing root', () => {
     expect(collectIndexRows(join(root, 'nope'))).toEqual({ sessions: [], files: [], tags: [], fileMeta: [] })
   })
+
+  it('does not index the .logvue app-data directory', () => {
+    mkdirSync(join(root, '.logvue'), { recursive: true })
+    writeFileSync(join(root, '.logvue', 'index.sqlite'), 'internal')
+    writeSession(join(root, 'Visible'), { session_id: 'visible', display_name: 'Visible' })
+
+    const rows = collectIndexRows(root)
+    expect(rows.sessions.map((session) => session.session_id)).toEqual(['visible'])
+    expect(rows.files).toEqual([])
+  })
 })

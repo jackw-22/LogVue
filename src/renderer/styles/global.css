@@ -131,6 +131,15 @@ button.ghost {
 button.ghost:hover {
   background: var(--panel-2);
 }
+button.danger {
+  background: #f5223d;
+  color: #fff;
+  border: 1px solid #ff5368;
+  box-shadow: 0 0 0 1px rgba(245, 34, 61, 0.12), 0 4px 14px rgba(245, 34, 61, 0.24);
+}
+button.danger:hover {
+  background: #ff334d;
+}
 /* Quick import — the dashed "fast path" variant (prototype hub view). */
 button.quick-btn {
   background: transparent;
@@ -836,6 +845,30 @@ input[type="checkbox"] {
   flex: none;
 }
 
+.danger-zone {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--red) 58%, var(--border));
+  border-radius: 9px;
+  padding: 0.9rem;
+  background: color-mix(in srgb, var(--red) 8%, var(--panel));
+}
+.danger-zone h3 {
+  margin: 0 0 0.25rem;
+  color: #ff6477;
+}
+.danger-zone p {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+.danger-zone .form-error {
+  grid-column: 1 / -1;
+  color: #ff6477;
+}
+
 .callout {
   display: flex;
   align-items: center;
@@ -1228,6 +1261,20 @@ button.chip.meta.more {
   justify-content: flex-end;
   gap: 0.6rem;
   margin-top: 0.25rem;
+}
+.delete-session-modal {
+  border-color: color-mix(in srgb, var(--red) 62%, var(--border));
+}
+.delete-session-modal p {
+  line-height: 1.5;
+  color: var(--muted);
+}
+.delete-session-modal strong {
+  color: var(--text);
+}
+.delete-session-modal .danger-copy {
+  color: #ff6477;
+  font-weight: 700;
 }
 
 /* ── hub log import ───────────────────────────────────────── */

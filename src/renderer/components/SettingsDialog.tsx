@@ -3,6 +3,7 @@ import {
   useClearHubLogFolder,
   usePickArchiveRoot,
   usePickHubLogFolder,
+  useSetConfirmDeletePopulatedSessions,
   useSetHubDataSource
 } from '../api/hooks'
 
@@ -16,11 +17,13 @@ export default function SettingsDialog({ settings, onClose }: Props): JSX.Elemen
   const setHubDataSource = useSetHubDataSource()
   const pickHubLogFolder = usePickHubLogFolder()
   const clearHubLogFolder = useClearHubLogFolder()
+  const setDeleteConfirmation = useSetConfirmDeletePopulatedSessions()
   const busy =
     pickLibrary.isPending ||
     setHubDataSource.isPending ||
     pickHubLogFolder.isPending ||
-    clearHubLogFolder.isPending
+    clearHubLogFolder.isPending ||
+    setDeleteConfirmation.isPending
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -89,6 +92,23 @@ export default function SettingsDialog({ settings, onClose }: Props): JSX.Elemen
               )}
             </div>
           )}
+        </section>
+
+        <section className="settings-section vertical">
+          <h3>Deletion</h3>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={settings.confirmDeletePopulatedSessions}
+              onChange={(e) => setDeleteConfirmation.mutate(e.target.checked)}
+              disabled={busy}
+            />
+            Confirm before deleting sessions containing files or child folders
+          </label>
+          <span className="muted small">
+            Empty sessions are deleted immediately. You can restore confirmations here after choosing
+            “Don’t ask again”.
+          </span>
         </section>
 
         <div className="modal-actions">

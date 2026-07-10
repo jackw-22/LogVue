@@ -83,6 +83,8 @@ const handlers: Handlers = {
     refreshAdbClient()
     return next
   },
+  'settings:setConfirmDeletePopulatedSessions': async (confirm) =>
+    saveSettings({ confirmDeletePopulatedSessions: confirm }),
 
   // ── archive / sessions ──
   'archive:tree': async () => archive.scanTree(getSettings().archiveRoot ?? ''),
@@ -109,6 +111,14 @@ const handlers: Handlers = {
     // Keep the index in step so type/tag/name edits are reflected in filters (spec §12).
     reindexSession(getSettings().archiveRoot, path)
     return session
+  },
+  'archive:deleteSessionSummary': async (path) =>
+    archive.deleteSessionSummary(getSettings().archiveRoot, path),
+  'archive:deleteSession': async (path) => {
+    const root = getSettings().archiveRoot
+    const summary = archive.deleteSession(root, path)
+    rebuild(root)
+    return summary
   },
   'archive:promoteFolder': async (path) => {
     const session = archive.promoteFolder(path)

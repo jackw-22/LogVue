@@ -21,7 +21,9 @@ export const api = {
     pickHubLogFolder: () => window.api.invoke('settings:pickHubLogFolder'),
     setHubDataSource: (source: 'adb' | 'folder') =>
       window.api.invoke('settings:setHubDataSource', source),
-    setHubLogFolder: (path: string | null) => window.api.invoke('settings:setHubLogFolder', path)
+    setHubLogFolder: (path: string | null) => window.api.invoke('settings:setHubLogFolder', path),
+    setConfirmDeletePopulatedSessions: (confirm: boolean) =>
+      window.api.invoke('settings:setConfirmDeletePopulatedSessions', confirm)
   },
   archive: {
     tree: () => window.api.invoke('archive:tree'),
@@ -33,6 +35,8 @@ export const api = {
     createSession: (input: CreateSessionInput) => window.api.invoke('archive:createSession', input),
     updateMeta: (path: string, patch: Partial<SessionMetadata>) =>
       window.api.invoke('archive:updateMeta', path, patch),
+    deleteSessionSummary: (path: string) => window.api.invoke('archive:deleteSessionSummary', path),
+    deleteSession: (path: string) => window.api.invoke('archive:deleteSession', path),
     promoteFolder: (path: string) => window.api.invoke('archive:promoteFolder', path),
     readNotes: (path: string) => window.api.invoke('archive:readNotes', path),
     writeNotes: (path: string, md: string) => window.api.invoke('archive:writeNotes', path, md),

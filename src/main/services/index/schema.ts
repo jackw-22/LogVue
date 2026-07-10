@@ -1,7 +1,7 @@
 /**
  * The local index schema (ARCHITECTURE.md §8). Everything here is *derivable from
  * disk* — the index is a rebuildable/disposable cache, never the source of truth
- * (ARCHITECTURE §4). Delete `index.sqlite`, relaunch, and `rebuild.ts` reconstructs
+ * (ARCHITECTURE §4). Delete `.logvue/index.sqlite`, relaunch, and `rebuild.ts` reconstructs
  * the `sessions`/`files` rows from a full folder rescan.
  *
  * The DDL lives here as a string constant rather than a `.sql` asset so it ships

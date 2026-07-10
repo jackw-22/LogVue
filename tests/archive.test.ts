@@ -4,6 +4,8 @@ import { tmpdir } from 'os'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   createSession,
+  deleteSession,
+  deleteSessionSummary,
   getSession,
   listFolderFiles,
   promoteFolder,
@@ -56,6 +58,14 @@ describe('scanTree', () => {
 
   it('returns [] for a missing root', () => {
     expect(scanTree(join(root, 'nope'))).toEqual([])
+  })
+
+  it('does not expose the .logvue app-data directory as a session', () => {
+    writeSession(join(root, 'Visible'), { display_name: 'Visible' })
+    mkdirSync(join(root, '.logvue'), { recursive: true })
+    writeFileSync(join(root, '.logvue', 'index.sqlite'), 'internal')
+
+    expect(scanTree(root).map((node) => node.name)).toEqual(['Visible'])
   })
 })
 
@@ -139,6 +149,57 @@ describe('updateMeta', () => {
     expect(updated.metadata.tags).toEqual(['swerve', 'heading-pid'])
     expect(updated.metadata.updated_at >= before).toBe(true)
     expect(updated.metadata.display_name).toBe('Tuning') // preserved
+  })
+})
+
+describe('deleteSession', () => {
+  it('summarises and recursively deletes files, notes, and child folders', () => {
+    const parent = createSession({
+      parentPath: root,
+      displayName: 'Heading PID',
+      sessionType: 'tuning_session'
+    })
+    writeFileSync(join(parent.path, 'heading.rlog'), 'log')
+    writeFileSync(join(parent.path, 'notes.md'), '# findings')
+    const child = createSession({
+      parentPath: parent.path,
+      displayName: 'Child',
+      sessionType: 'test_session'
+    })
+    writeFileSync(join(child.path, 'child.rlog'), 'log')
+
+    expect(deleteSessionSummary(root, parent.path)).toMatchObject({
+      path: parent.path,
+      displayName: 'Heading PID',
+      fileCount: 3,
+      childFolderCount: 1
+    })
+
+    const deleted = deleteSession(root, parent.path)
+    expect(deleted.fileCount).toBe(3)
+    expect(existsSync(parent.path)).toBe(false)
+  })
+
+  it('reports an empty session without counting session.json as user data', () => {
+    const session = createSession({
+      parentPath: root,
+      displayName: 'Empty',
+      sessionType: 'general_session'
+    })
+    expect(deleteSessionSummary(root, session.path)).toMatchObject({
+      fileCount: 0,
+      childFolderCount: 0
+    })
+  })
+
+  it('refuses to delete the archive root or a folder outside it', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'logvue-outside-'))
+    try {
+      expect(() => deleteSessionSummary(root, root)).toThrow(/outside the archive root/)
+      expect(() => deleteSessionSummary(root, outside)).toThrow(/outside the archive root/)
+    } finally {
+      rmSync(outside, { recursive: true, force: true })
+    }
   })
 })
 

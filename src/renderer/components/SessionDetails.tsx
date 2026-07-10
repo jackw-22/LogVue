@@ -5,15 +5,18 @@ import {
   toSelectableSessionType
 } from '@shared/constants/sessionTypes'
 import { isMatchType } from '@shared/constants/matchTypes'
-import type { SessionType } from '@shared/types/session'
+import type { DeleteSessionSummary, SessionType } from '@shared/types/session'
 import { formatBytes } from '@shared/format/bytes'
 import {
   useNotes,
+  useDeleteSession,
+  useDeleteSessionSummary,
   useFolderFiles,
   useOpenFile,
   usePromoteFolder,
   useSession,
   useSettings,
+  useSetConfirmDeletePopulatedSessions,
   useShowFile,
   useShowFolder,
   useUpdateMeta,
@@ -28,6 +31,7 @@ import MatchList from './MatchList'
 import FolderDetails from './FolderDetails'
 import FtcScoutSyncPanel from './FtcScoutSyncPanel'
 import SuggestedLogs from './SuggestedLogs'
+import DeleteSessionDialog from './DeleteSessionDialog'
 
 /** Quiet period after the last keystroke before notes are written to disk. */
 const AUTOSAVE_DELAY_MS = 700
@@ -48,6 +52,10 @@ function filePath(dir: string, filename: string): string {
   return `${dir.replace(/[\\/]+$/, '')}${separator}${filename}`
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Could not delete the session.'
+}
+
 export default function SessionDetails({ path, onNewChild }: Props): JSX.Element {
   const { data: session, isLoading } = useSession(path)
   const { data: settings } = useSettings()
@@ -56,6 +64,9 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
   const update = useUpdateMeta(path)
   const promote = usePromoteFolder(path)
   const saveNotes = useWriteNotes()
+  const inspectDelete = useDeleteSessionSummary()
+  const deleteSession = useDeleteSession()
+  const setDeleteConfirmation = useSetConfirmDeletePopulatedSessions()
   const openFile = useOpenFile()
   const showFile = useShowFile()
   const showFolder = useShowFolder()
@@ -69,6 +80,8 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
   const [tags, setTags] = useState('')
   const [draftNotes, setDraftNotes] = useState('')
   const [fileMenu, setFileMenu] = useState<FileMenuState | null>(null)
+  const [deletePrompt, setDeletePrompt] = useState<DeleteSessionSummary | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // Reset local edit state whenever the loaded session changes.
   useEffect(() => {
@@ -131,6 +144,52 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
   const parsedTags = tags.split(',').map((t) => t.trim()).filter(Boolean)
   const importedByName = new Map(m.files.map((f) => [f.filename, f]))
   const files = folderFiles ?? []
+  const deleteBusy =
+    inspectDelete.isPending || deleteSession.isPending || setDeleteConfirmation.isPending
+
+  async function deleteNow(): Promise<void> {
+    setDeleteError(null)
+    try {
+      await deleteSession.mutateAsync(path)
+      setDeletePrompt(null)
+      select(null)
+    } catch (error) {
+      setDeleteError(errorMessage(error))
+    }
+  }
+
+  async function requestDelete(): Promise<void> {
+    setDeleteError(null)
+    try {
+      // Resolve any pending autosave before inspecting the folder, so notes are
+      // included in the destructive confirmation and cannot race the deletion.
+      if (dirtyRef.current) {
+        dirtyRef.current = false
+        setDirty(false)
+        await saveNotes.mutateAsync({ path, md: draftRef.current })
+      }
+
+      const summary = await inspectDelete.mutateAsync(path)
+      const populated = summary.fileCount > 0 || summary.childFolderCount > 0
+      if (populated && settings?.confirmDeletePopulatedSessions !== false) {
+        setDeletePrompt(summary)
+      } else {
+        await deleteNow()
+      }
+    } catch (error) {
+      setDeleteError(errorMessage(error))
+    }
+  }
+
+  async function confirmDelete(dontAskAgain: boolean): Promise<void> {
+    setDeleteError(null)
+    try {
+      if (dontAskAgain) await setDeleteConfirmation.mutateAsync(false)
+      await deleteNow()
+    } catch (error) {
+      setDeleteError(errorMessage(error))
+    }
+  }
 
   // The mutation is shared across sessions, so only report its result for this one.
   const lastSaveWasThisSession = saveNotes.variables?.path === path
@@ -308,6 +367,22 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
         </section>
       )}
 
+      <section className="danger-zone">
+        <div>
+          <h3>Delete session</h3>
+          <p>Permanently remove this session, its files, notes, and child sessions.</p>
+        </div>
+        <button
+          type="button"
+          className="danger"
+          onClick={() => void requestDelete()}
+          disabled={deleteBusy}
+        >
+          {inspectDelete.isPending ? 'Checking…' : deleteSession.isPending ? 'Deleting…' : 'Delete session'}
+        </button>
+        {deleteError && !deletePrompt && <p className="form-error">{deleteError}</p>}
+      </section>
+
       {fileMenu && (
         <div
           className="context-menu"
@@ -342,6 +417,19 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
             Copy path
           </button>
         </div>
+      )}
+
+      {deletePrompt && (
+        <DeleteSessionDialog
+          summary={deletePrompt}
+          busy={deleteSession.isPending || setDeleteConfirmation.isPending}
+          error={deleteError}
+          onCancel={() => {
+            setDeletePrompt(null)
+            setDeleteError(null)
+          }}
+          onConfirm={(dontAskAgain) => void confirmDelete(dontAskAgain)}
+        />
       )}
     </div>
   )

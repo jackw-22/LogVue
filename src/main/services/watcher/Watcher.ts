@@ -4,7 +4,7 @@ import chokidar from 'chokidar'
 import type { FSWatcher } from 'chokidar'
 import type { ArchiveChangedEvent } from '@shared/types/ipc'
 import { rebuild } from '../index/indexService'
-import { INDEX_FILE } from '../archive/paths'
+import { INDEX_FILE, INTERNAL_DIR } from '../archive/paths'
 
 const DEBOUNCE_MS = 400
 
@@ -18,6 +18,7 @@ interface WatcherState {
 let current: WatcherState | null = null
 
 export function shouldIgnoreArchivePath(path: string): boolean {
+  if (path.split(/[\\/]+/).includes(INTERNAL_DIR)) return true
   const name = basename(path)
   if (!name) return false
   if (name === INDEX_FILE || name === `${INDEX_FILE}-wal` || name === `${INDEX_FILE}-shm`) return true

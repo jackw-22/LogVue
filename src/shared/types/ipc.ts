@@ -12,6 +12,7 @@
 import type {
   AppSettings,
   CreateSessionInput,
+  DeleteSessionSummary,
   FolderFile,
   Session,
   SessionMetadata,
@@ -64,6 +65,7 @@ export interface IpcApi {
   'settings:pickHubLogFolder': () => Promise<string | null>
   'settings:setHubDataSource': (source: AppSettings['hubDataSource']) => Promise<AppSettings>
   'settings:setHubLogFolder': (path: string | null) => Promise<AppSettings>
+  'settings:setConfirmDeletePopulatedSessions': (confirm: boolean) => Promise<AppSettings>
 
   // ── archive / sessions (disk-backed; source of truth) ──────
   /** The session tree beneath the archive root. */
@@ -79,6 +81,10 @@ export interface IpcApi {
   'archive:openFile': (path: string, filename: string) => Promise<void>
   'archive:createSession': (input: CreateSessionInput) => Promise<Session>
   'archive:updateMeta': (path: string, patch: Partial<SessionMetadata>) => Promise<Session>
+  /** Recursively count the user data that deleting this session would remove. */
+  'archive:deleteSessionSummary': (path: string) => Promise<DeleteSessionSummary>
+  /** Permanently delete a session folder and all descendants. */
+  'archive:deleteSession': (path: string) => Promise<DeleteSessionSummary>
   /** Write a `session.json` for a bare folder using discovery defaults (spec §4.2). */
   'archive:promoteFolder': (path: string) => Promise<Session>
   'archive:readNotes': (path: string) => Promise<string>

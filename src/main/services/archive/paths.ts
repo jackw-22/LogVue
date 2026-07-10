@@ -3,10 +3,12 @@ import { existsSync } from 'fs'
 
 export const SESSION_JSON = 'session.json'
 export const NOTES_FILE = 'notes.md'
+/** App-owned archive data. Never presented as a session or indexed as content. */
+export const INTERNAL_DIR = '.logvue'
 export const INDEX_FILE = 'index.sqlite'
 
 /** Files/folders the scanner ignores as archive plumbing, not content. */
-export const RESERVED_NAMES = new Set([SESSION_JSON, INDEX_FILE])
+export const RESERVED_NAMES = new Set([SESSION_JSON, INTERNAL_DIR, INDEX_FILE])
 
 // Characters illegal in Windows/POSIX file names. Spaces (→ underscore) and
 // hyphens (legal, readable) are deliberately NOT in this set.

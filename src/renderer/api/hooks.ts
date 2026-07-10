@@ -193,6 +193,14 @@ export function useClearHubLogFolder() {
   })
 }
 
+export function useSetConfirmDeletePopulatedSessions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (confirm: boolean) => api.settings.setConfirmDeletePopulatedSessions(confirm),
+    onSuccess: (settings) => qc.setQueryData(keys.settings, settings)
+  })
+}
+
 export function useCreateSession() {
   const qc = useQueryClient()
   return useMutation({
@@ -224,6 +232,29 @@ export function usePromoteFolder(path: string) {
       qc.setQueryData(keys.session(path), session)
       qc.invalidateQueries({ queryKey: keys.tree })
       qc.invalidateQueries({ queryKey: ['index'] })
+    }
+  })
+}
+
+/** Inspect recursive delete impact immediately before presenting confirmation. */
+export function useDeleteSessionSummary() {
+  return useMutation({
+    mutationFn: (path: string) => api.archive.deleteSessionSummary(path)
+  })
+}
+
+/** Delete a session, then remove stale detail data and refresh every affected view. */
+export function useDeleteSession() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (path: string) => api.archive.deleteSession(path),
+    onSuccess: (_summary, path) => {
+      qc.removeQueries({ queryKey: keys.session(path) })
+      qc.removeQueries({ queryKey: keys.files(path) })
+      qc.removeQueries({ queryKey: keys.notes(path) })
+      qc.invalidateQueries({ queryKey: keys.tree })
+      qc.invalidateQueries({ queryKey: ['index'] })
+      qc.invalidateQueries({ queryKey: keys.hubLogs })
     }
   })
 }

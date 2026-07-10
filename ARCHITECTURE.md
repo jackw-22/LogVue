@@ -216,11 +216,11 @@ type ImportStatus =
 | Session existence & nesting   | **folders on disk**         | ✅ yes |
 | Session metadata / files      | **`session.json`**          | ✅ yes |
 | Human notes                   | **`notes.md`**              | ✅ yes |
-| Fast browse/filter/search     | `index.sqlite`              | ❌ rebuildable |
-| Ignored-remote-log markers    | `index.sqlite` (spec §15)   | ❌ cache |
-| FTCScout event/match cache    | `index.sqlite`              | ❌ cache |
+| Fast browse/filter/search     | `.logvue/index.sqlite`              | ❌ rebuildable |
+| Ignored-remote-log markers    | `.logvue/index.sqlite` (spec §15)   | ❌ cache |
+| FTCScout event/match cache    | `.logvue/index.sqlite`              | ❌ cache |
 
-**Rule:** the index is disposable. Delete `index.sqlite`, relaunch, and a full
+**Rule:** the index is disposable. Delete `.logvue/index.sqlite`, relaunch, and a full
 rescan (`index/rebuild.ts`) reconstructs everything (spec §13). This is enforced
 by never writing app-critical state *only* to sqlite.
 
@@ -306,7 +306,7 @@ hides them behind a "Show ignored" toggle.
 
 ```
 app boot → settings.archiveRoot
-  → if index.sqlite missing OR schema out of date → rebuild.ts scans every folder,
+  → if .logvue/index.sqlite missing OR schema out of date → rebuild.ts scans every folder,
      parses session.json (zod; discovery defaults for bare folders) → populates index
   → Watcher (chokidar) starts on archiveRoot for incremental updates
   → renderer requests archive:tree (served from index, fast)

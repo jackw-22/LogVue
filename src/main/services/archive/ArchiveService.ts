@@ -1,15 +1,24 @@
-import { basename, join } from 'path'
-import { existsSync, mkdirSync, readdirSync, statSync } from 'fs'
+import { basename, isAbsolute, join, relative, resolve, sep } from 'path'
+import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'fs'
 import { LOG_KINDS } from '@shared/constants/fileKinds'
 import { makeDefaultMetadata } from '@shared/schema/sessionJson'
 import type {
   CreateSessionInput,
+  DeleteSessionSummary,
   FolderFile,
   Session,
   SessionMetadata,
   SessionNode
 } from '@shared/types/session'
-import { INDEX_FILE, NOTES_FILE, RESERVED_NAMES, toFolderName, uniqueChildDir } from './paths'
+import {
+  INDEX_FILE,
+  INTERNAL_DIR,
+  NOTES_FILE,
+  RESERVED_NAMES,
+  SESSION_JSON,
+  toFolderName,
+  uniqueChildDir
+} from './paths'
 import { guessFileKind } from '../import/fileKind'
 import { extractRlogMetadata } from '../rlog/rlogMetadata'
 import { readMetadata, readMetadataOrDefault, writeMetadata } from './SessionStore'
@@ -37,7 +46,7 @@ function scanNode(dir: string): SessionNode {
   // fall back to the on-disk .rlog count so bare folders still show a badge.
   const metaLogCount = metadata.files.filter((f) => LOG_KINDS.has(f.kind)).length
   const children = readdirSync(dir, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
+    .filter((e) => e.isDirectory() && !RESERVED_NAMES.has(e.name))
     .map((e) => scanNode(join(dir, e.name)))
 
   children.sort(compareNodes)
@@ -69,7 +78,7 @@ function compareNodes(a: SessionNode, b: SessionNode): number {
 export function scanTree(root: string): SessionNode[] {
   if (!root || !existsSync(root)) return []
   const nodes = readdirSync(root, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
+    .filter((e) => e.isDirectory() && !RESERVED_NAMES.has(e.name))
     .map((e) => scanNode(join(root, e.name)))
   nodes.sort(compareNodes)
   return nodes
@@ -151,4 +160,77 @@ export function promoteFolder(dir: string): Session {
   const metadata = existing ?? makeDefaultMetadata(basename(dir))
   const written = writeMetadata(dir, metadata)
   return { path: dir, name: basename(dir), metadata: written, hasSessionJson: true }
+}
+
+/** True when `candidate` is a strict descendant of `root`. */
+function isStrictDescendant(root: string, candidate: string): boolean {
+  const rel = relative(root, candidate)
+  return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)
+}
+
+/**
+ * Resolve and validate a session folder before a destructive operation. Symlinks
+ * are rejected so a path that looks like it is in the archive cannot target data
+ * elsewhere on disk. The archive root itself is never deletable.
+ */
+function deletableSessionPath(root: string | null | undefined, dir: string): string {
+  if (!root || !existsSync(root)) throw new Error('No valid archive root is configured')
+
+  const requested = resolve(dir)
+  const requestedStat = lstatSync(requested)
+  if (!requestedStat.isDirectory() || requestedStat.isSymbolicLink()) {
+    throw new Error('The selected session is not a deletable folder')
+  }
+
+  const realRoot = realpathSync(resolve(root))
+  const realTarget = realpathSync(requested)
+  if (!isStrictDescendant(realRoot, realTarget)) {
+    throw new Error('Refusing to delete a folder outside the archive root')
+  }
+  return realTarget
+}
+
+function countDeleteContents(dir: string): { fileCount: number; childFolderCount: number } {
+  let fileCount = 0
+  let childFolderCount = 0
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const entryPath = join(dir, entry.name)
+    if (entry.name === INTERNAL_DIR) continue
+    if (entry.isDirectory()) {
+      childFolderCount += 1
+      const child = countDeleteContents(entryPath)
+      fileCount += child.fileCount
+      childFolderCount += child.childFolderCount
+    } else if (entry.name !== SESSION_JSON && entry.name !== INDEX_FILE) {
+      // notes.md is intentionally counted: deleting investigation notes is data loss
+      // even when the session contains no imported logs. Symlinks and other unusual
+      // directory entries count too, but are never followed during inspection.
+      fileCount += 1
+    }
+  }
+  return { fileCount, childFolderCount }
+}
+
+/** Inspect the complete recursive impact before asking the user for confirmation. */
+export function deleteSessionSummary(
+  root: string | null | undefined,
+  dir: string
+): DeleteSessionSummary {
+  const target = deletableSessionPath(root, dir)
+  const { metadata } = readMetadataOrDefault(target)
+  return {
+    path: target,
+    displayName: metadata.display_name,
+    ...countDeleteContents(target)
+  }
+}
+
+/** Permanently remove one session folder and all of its contents. */
+export function deleteSession(
+  root: string | null | undefined,
+  dir: string
+): DeleteSessionSummary {
+  const summary = deleteSessionSummary(root, dir)
+  rmSync(summary.path, { recursive: true })
+  return summary
 }

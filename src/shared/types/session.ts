@@ -118,9 +118,21 @@ export interface CreateSessionInput {
   sessionType: SessionType
 }
 
+/** Content that will be removed by recursively deleting one session folder. */
+export interface DeleteSessionSummary {
+  path: string
+  displayName: string
+  /** All non-LogVue-plumbing files below the session, including notes. */
+  fileCount: number
+  /** All descendant folders, whether recognised sessions or bare grouping folders. */
+  childFolderCount: number
+}
+
 export interface AppSettings {
   archiveRoot: string | null
   teamNumber: number | null
   hubDataSource: 'adb' | 'folder'
   hubLogFolder: string | null
+  /** Ask before recursively deleting a session that contains files or child folders. */
+  confirmDeletePopulatedSessions: boolean
 }

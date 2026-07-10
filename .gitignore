@@ -4,6 +4,7 @@ dist/
 dist-electron/
 *.log
 .DS_Store
+.logvue/
 
 # WSL / Windows metadata cruft
 *:Zone.Identifier

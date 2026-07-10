@@ -111,7 +111,8 @@ Recommended root structure:
 
 ```text
 FTCLogArchive/
-  index.sqlite
+  .logvue/
+    index.sqlite
   2026/
     APOC26/
       session.json
@@ -889,7 +890,7 @@ However, the app should maintain a global index for fast browsing and filtering.
 Recommended:
 
 ```text
-FTCLogArchive/index.sqlite
+FTCLogArchive/.logvue/index.sqlite
 ```
 
 The index should be rebuildable by scanning the archive and reading all `session.json` files.
@@ -897,7 +898,7 @@ The index should be rebuildable by scanning the archive and reading all `session
 Required behaviour:
 
 ```text
-If index.sqlite is missing:
+If .logvue/index.sqlite is missing:
   Rebuild index from session folders.
 
 If session.json changes:

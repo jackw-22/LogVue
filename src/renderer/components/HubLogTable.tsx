@@ -16,7 +16,12 @@ import {
 } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
 import { guessAlliance } from '../lib/alliance'
-import { correctedHubTimestamp, formatHubOffset, formatTimestamp } from '../lib/time'
+import {
+  correctedHubTimestamp,
+  formatHubOffset,
+  formatRecentTimestamp,
+  formatTimestamp
+} from '../lib/time'
 import ImportDialog from './ImportDialog'
 
 /** Local YYYY-MM-DD, the name of the date-based session quick import targets. */
@@ -280,7 +285,9 @@ function Row({
           {log.opmode ?? <span className="muted">—</span>}
         </span>
       </td>
-      <td className="mono">{formatTimestamp(recorded)}</td>
+      <td className="mono" title={formatTimestamp(recorded)}>
+        {formatRecentTimestamp(recorded)}
+      </td>
       <td className="num mono">{formatBytes(log.file_size_bytes)}</td>
       <td>
         <StatusBadge status={log.import_status} />
