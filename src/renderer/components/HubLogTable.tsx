@@ -110,7 +110,10 @@ export default function HubLogTable(): JSX.Element {
     const refs = target.map((l) => ({
       remotePath: l.remote_path,
       filename: l.filename,
-      fileSize: l.file_size_bytes
+      fileSize: l.file_size_bytes,
+      recordedAt: correctHubTime
+        ? correctedHubTimestamp(l.parsed_timestamp, hubTime?.hubTimezoneOffsetMinutes ?? null, hubTime?.offsetMs ?? 0)
+        : null
     }))
     if (existing) {
       for (const ref of refs) {
@@ -230,6 +233,8 @@ export default function HubLogTable(): JSX.Element {
         <ImportDialog
           logs={dialog.logs}
           archiveRoot={settings.archiveRoot}
+          correctHubTime={correctHubTime}
+          hubTime={hubTime}
           initialMode={dialog.mode}
           onImported={() => setSelected(new Set())}
           onClose={() => setDialog(null)}

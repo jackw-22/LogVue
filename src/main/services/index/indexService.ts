@@ -92,7 +92,7 @@ export function queryLogs(root: string | null | undefined, query: SessionQuery):
       kind: r.kind as FileKind,
       opmode,
       sizeBytes: r.file_size_bytes,
-      recorded: parsed_timestamp ?? r.imported_at
+      recorded: r.recorded_at ?? parsed_timestamp ?? r.imported_at
     }
   })
   // Newest first; rows without any timestamp sink to the end.

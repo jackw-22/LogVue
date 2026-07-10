@@ -15,6 +15,7 @@ export interface HubLogRef {
   /** Original remote basename — kept as the imported filename (spec §22 default). */
   filename: string
   fileSize: number | null
+  recordedAt?: string | null
 }
 
 export interface ImportRequest extends HubLogRef {

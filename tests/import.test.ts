@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -126,6 +126,21 @@ describe('importToSession', () => {
       file_size_bytes: 3
     })
     expect(meta.updated_at >= before).toBe(true)
+  })
+
+  it('persists the corrected recording time and applies it to the imported file', async () => {
+    const session = createSession({ parentPath: root, displayName: 'Q4', sessionType: 'official_match' })
+    const recordedAt = '2026-07-04T01:50:05.104Z'
+    await importToSession(adb as unknown as AdbLike, null, {
+      ...ref('AutoOpMode_log_20260704_115005_104.rlog'),
+      recordedAt,
+      sessionPath: session.path
+    })
+
+    const filePath = join(session.path, 'AutoOpMode_log_20260704_115005_104.rlog')
+    const meta = JSON.parse(readFileSync(join(session.path, 'session.json'), 'utf-8'))
+    expect(meta.files[0].recorded_at).toBe(recordedAt)
+    expect(statSync(filePath).mtimeMs).toBe(Date.parse(recordedAt))
   })
 
   it('appends (never replaces) and disambiguates a colliding filename', async () => {

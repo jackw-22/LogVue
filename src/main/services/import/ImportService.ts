@@ -1,4 +1,5 @@
 import { basename } from 'path'
+import { utimes } from 'fs/promises'
 import type {
   ImportRequest,
   ImportResult,
@@ -43,12 +44,18 @@ export async function importToSession(
 
   const destPath = uniqueFilePath(req.sessionPath, req.filename)
   await adb.pull(req.remotePath, destPath)
+  const recordedMs = req.recordedAt ? Date.parse(req.recordedAt) : NaN
+  if (Number.isFinite(recordedMs)) {
+    const recordedDate = new Date(recordedMs)
+    await utimes(destPath, recordedDate, recordedDate)
+  }
 
   const file: SessionFile = {
     filename: basename(destPath),
     kind: req.kind ?? guessFileKind(req.filename),
     source: 'control_hub',
     imported_at: new Date().toISOString(),
+    recorded_at: Number.isFinite(recordedMs) ? new Date(recordedMs).toISOString() : null,
     remote_path: req.remotePath,
     original_filename: req.filename,
     file_size_bytes: req.fileSize
@@ -92,6 +99,7 @@ export async function importToNewSession(
         remotePath: log.remotePath,
         filename: log.filename,
         fileSize: log.fileSize,
+        recordedAt: log.recordedAt,
         sessionPath: session.path,
         force: true
       })

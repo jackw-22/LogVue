@@ -26,9 +26,9 @@ const INSERT_SESSION_SQL = `INSERT INTO sessions
      updated_at=excluded.updated_at`
 
 const INSERT_FILE_SQL = `INSERT INTO files
-    (session_id, filename, kind, remote_path, original_filename, file_size_bytes, imported_at)
+    (session_id, filename, kind, remote_path, original_filename, file_size_bytes, imported_at, recorded_at)
    VALUES
-    (@session_id, @filename, @kind, @remote_path, @original_filename, @file_size_bytes, @imported_at)`
+    (@session_id, @filename, @kind, @remote_path, @original_filename, @file_size_bytes, @imported_at, @recorded_at)`
 
 const INSERT_TAG_SQL = `INSERT OR IGNORE INTO session_tags (session_id, tag) VALUES (@session_id, @tag)`
 
@@ -282,6 +282,7 @@ export class IndexStore {
     kind: string
     file_size_bytes: number | null
     imported_at: string | null
+    recorded_at: string | null
     path: string
     display_name: string
     session_type: string
@@ -301,7 +302,7 @@ export class IndexStore {
     }
     return this.db
       .prepare(
-        `SELECT f.filename, f.kind, f.file_size_bytes, f.imported_at,
+        `SELECT f.filename, f.kind, f.file_size_bytes, f.imported_at, f.recorded_at,
                 s.path, s.display_name, s.session_type, s.alliance
            FROM files f JOIN sessions s ON s.session_id = f.session_id
           WHERE (${where}) AND ${textClause}`
@@ -311,6 +312,7 @@ export class IndexStore {
       kind: string
       file_size_bytes: number | null
       imported_at: string | null
+      recorded_at: string | null
       path: string
       display_name: string
       session_type: string

@@ -9,6 +9,7 @@ export interface SessionFile {
   kind: FileKind
   source: string // e.g. 'control_hub' | 'manual' | 'usb_camera'
   imported_at: string
+  recorded_at?: string | null
   remote_path?: string | null
   original_filename?: string | null
   file_size_bytes?: number | null

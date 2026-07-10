@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { SELECTABLE_SESSION_TYPES, SESSION_TYPE_LABELS } from '@shared/constants/sessionTypes'
 import type { SessionType, SessionNode } from '@shared/types/session'
-import type { HubLog } from '@shared/types/hublog'
+import type { HubLog, HubTimeSample } from '@shared/types/hublog'
 import type { HubLogRef, ImportResult } from '@shared/types/import'
 import { useArchiveTree, useImportToNewSession, useImportToSession } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
+import { correctedHubTimestamp } from '../lib/time'
 
 interface Props {
   logs: HubLog[]
@@ -13,6 +14,8 @@ interface Props {
   initialMode?: Mode
   onClose: () => void
   onImported: () => void
+  correctHubTime: boolean
+  hubTime: HubTimeSample | undefined
 }
 
 type Mode = 'existing' | 'new'
@@ -33,8 +36,15 @@ function flatten(nodes: SessionNode[], depth = 0, out: FlatNode[] = []): FlatNod
   return out
 }
 
-function toRef(log: HubLog): HubLogRef {
-  return { remotePath: log.remote_path, filename: log.filename, fileSize: log.file_size_bytes }
+function toRef(log: HubLog, correctHubTime: boolean, hubTime: HubTimeSample | undefined): HubLogRef {
+  return {
+    remotePath: log.remote_path,
+    filename: log.filename,
+    fileSize: log.file_size_bytes,
+    recordedAt: correctHubTime
+      ? correctedHubTimestamp(log.parsed_timestamp, hubTime?.hubTimezoneOffsetMinutes ?? null, hubTime?.offsetMs ?? 0)
+      : null
+  }
 }
 
 /**
@@ -47,7 +57,9 @@ export default function ImportDialog({
   archiveRoot,
   initialMode = 'existing',
   onClose,
-  onImported
+  onImported,
+  correctHubTime,
+  hubTime
 }: Props): JSX.Element {
   const { data: tree } = useArchiveTree(true)
   const flat = useMemo(() => (tree ? flatten(tree) : []), [tree])
@@ -70,7 +82,7 @@ export default function ImportDialog({
   async function importAllInto(path: string, force: boolean): Promise<Entry[]> {
     const out: Entry[] = []
     for (const log of logs) {
-      const result = await importOne.mutateAsync({ ...toRef(log), sessionPath: path, force })
+      const result = await importOne.mutateAsync({ ...toRef(log, correctHubTime, hubTime), sessionPath: path, force })
       out.push({ log, result })
     }
     return out
@@ -87,7 +99,7 @@ export default function ImportDialog({
         parentPath: newParent,
         displayName: newName.trim(),
         sessionType: newType,
-        logs: logs.map(toRef)
+        logs: logs.map((log) => toRef(log, correctHubTime, hubTime))
       })
       select(res.session.path)
       // res.results is one-per-log in request order (spec §10 batch import).
@@ -100,7 +112,7 @@ export default function ImportDialog({
   async function forceDuplicates() {
     const forced: Entry[] = []
     for (const { log } of duplicates) {
-      const result = await importOne.mutateAsync({ ...toRef(log), sessionPath: targetPath, force: true })
+      const result = await importOne.mutateAsync({ ...toRef(log, correctHubTime, hubTime), sessionPath: targetPath, force: true })
       forced.push({ log, result })
     }
     setEntries((prev) =>

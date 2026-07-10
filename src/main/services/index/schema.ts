@@ -11,7 +11,7 @@
  * compares it against `PRAGMA user_version` and, on mismatch, drops and recreates
  * the derived tables (they're rebuilt from disk anyway — see §6.2 cold start).
  */
-export const INDEX_SCHEMA_VERSION = 4
+export const INDEX_SCHEMA_VERSION = 5
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS files (
   remote_path       TEXT,
   original_filename TEXT,
   file_size_bytes   INTEGER,
-  imported_at       TEXT
+  imported_at       TEXT,
+  recorded_at       TEXT
 );
 
 -- Derived tag membership (spec §12), one row per (session, tag), so a "tagged X"

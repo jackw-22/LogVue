@@ -3,7 +3,7 @@ import type { HubLog } from '@shared/types/hublog'
 import type { MatchInfo } from '@shared/types/session'
 import { formatBytes } from '@shared/format/bytes'
 import { useAdbStatus, useHubLogs, useHubTime, useImportToSession, useSettings } from '../api/hooks'
-import { formatHubOffset, formatTimestamp } from '../lib/time'
+import { correctedHubTimestamp, formatHubOffset, formatTimestamp } from '../lib/time'
 import {
   formatDelta,
   formatDeltaSeconds,
@@ -16,8 +16,8 @@ interface Props {
   match: MatchInfo | undefined
 }
 
-function toRef(log: HubLog) {
-  return { remotePath: log.remote_path, filename: log.filename, fileSize: log.file_size_bytes }
+function toRef(log: HubLog, recordedAt: string | null) {
+  return { remotePath: log.remote_path, filename: log.filename, fileSize: log.file_size_bytes, recordedAt }
 }
 
 export default function SuggestedLogs({ sessionPath, match }: Props): JSX.Element | null {
@@ -62,7 +62,10 @@ export default function SuggestedLogs({ sessionPath, match }: Props): JSX.Elemen
   }, [suggestions])
 
   async function importLog(log: HubLog): Promise<void> {
-    await importOne.mutateAsync({ ...toRef(log), sessionPath, force: false })
+    const recordedAt = correctHubTime
+      ? correctedHubTimestamp(log.parsed_timestamp, hubTime?.hubTimezoneOffsetMinutes ?? null, hubTime?.offsetMs ?? 0)
+      : null
+    await importOne.mutateAsync({ ...toRef(log, recordedAt), sessionPath, force: false })
   }
 
   async function importAll(): Promise<void> {

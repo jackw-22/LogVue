@@ -265,7 +265,7 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
                   <span className="file-name">{f.filename}</span>
                   <span className="mono small muted">{formatBytes(f.sizeBytes)}</span>
                   <span className="mono small muted">
-                    {f.tracked ? formatTimestamp(imported?.imported_at) : 'Loose file'}
+                    {f.tracked ? formatTimestamp(imported?.recorded_at ?? imported?.imported_at) : 'Loose file'}
                   </span>
                   <button
                     type="button"

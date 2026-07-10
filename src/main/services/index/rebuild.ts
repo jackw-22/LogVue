@@ -30,6 +30,7 @@ export interface FileRow {
   original_filename: string | null
   file_size_bytes: number | null
   imported_at: string | null
+  recorded_at: string | null
 }
 
 /** One row of the `session_tags` table — a (session, tag) membership for "tagged X" filters. */
@@ -77,7 +78,8 @@ export function toFileRows(sessionId: string, m: SessionMetadata): FileRow[] {
     remote_path: f.remote_path ?? null,
     original_filename: f.original_filename ?? null,
     file_size_bytes: f.file_size_bytes ?? null,
-    imported_at: f.imported_at ?? null
+    imported_at: f.imported_at ?? null,
+    recorded_at: f.recorded_at ?? null
   }))
 }
 
@@ -109,7 +111,8 @@ export function collectFileRows(dir: string, m: SessionMetadata): FileRow[] {
       remote_path: null,
       original_filename: name,
       file_size_bytes: fileSize,
-      imported_at: null
+      imported_at: null,
+      recorded_at: null
     })
   }
 
