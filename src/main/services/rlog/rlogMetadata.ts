@@ -4,7 +4,7 @@ import { closeSync, openSync, readSync } from 'fs'
  * Extracts the metadata map from the head of a PsiKit RLOG R2 file.
  *
  * `Logger.recordMetadata()` values are written as ordinary string records under
- * a `RealMetadata/` (or `ReplayMetadata/` in replay) subtable during the first
+ * the `/Metadata/` subtable during the first
  * log cycle, so only the head of the file needs decoding — never the full log.
  *
  * On-disk format (see PsiKit `RLOGEncoder`): byte 0 is the log revision (2),
@@ -20,11 +20,11 @@ const MAX_HEAD_BYTES = 128 * 1024
 /** Stop after this many cycles; metadata is recorded before cycle 1 starts. */
 const MAX_CYCLES = 8
 
-const METADATA_KEY_RE = /^\/?(?:Real|Replay)Metadata\//
+const METADATA_KEY_RE = /^\/Metadata\//
 
 /**
  * Metadata key → value from the head of an `.rlog` file, with the
- * `RealMetadata/` prefix stripped. Returns null when the file can't be read or
+ * metadata prefix stripped. Returns null when the file can't be read or
  * isn't a supported RLOG (wrong revision), and {} when it's a valid log that
  * simply recorded no metadata. Truncated trailing records are tolerated — the
  * scan just stops there.

@@ -53,9 +53,9 @@ function rlog(...records: Buffer[]): Buffer {
 
 const SAMPLE = rlog(
   timestamp(0.02),
-  keyDef(0, 'RealMetadata/GitSHA', 'string'),
+  keyDef(0, '/Metadata/GitSHA', 'string'),
   stringValue(0, 'a1b2c3d4e5f6'),
-  keyDef(1, 'RealMetadata/GitDirty', 'string'),
+  keyDef(1, '/Metadata/GitDirty', 'string'),
   stringValue(1, 'true'),
   keyDef(2, 'RealOutputs/Drivetrain/x', 'double'),
   doubleValue(2, 1.25),
@@ -78,24 +78,33 @@ function write(name: string, data: Buffer): string {
 }
 
 describe('extractRlogMetadata', () => {
-  it('extracts RealMetadata string entries with the prefix stripped', () => {
+  it('extracts /Metadata string entries with the prefix stripped', () => {
     const path = write('a.rlog', SAMPLE)
     expect(extractRlogMetadata(path)).toEqual({ GitSHA: 'a1b2c3d4e5f6', GitDirty: 'true' })
   })
 
-  it('accepts ReplayMetadata and a leading slash', () => {
+  it('ignores legacy metadata namespaces', () => {
     const path = write('b.rlog', rlog(
       timestamp(0),
-      keyDef(0, '/ReplayMetadata/OpMode Name', 'string'),
+      keyDef(0, 'RealMetadata/OpMode Name', 'string'),
       stringValue(0, 'FIELD CENTRIC')
     ))
-    expect(extractRlogMetadata(path)).toEqual({ 'OpMode Name': 'FIELD CENTRIC' })
+    expect(extractRlogMetadata(path)).toEqual({})
+  })
+
+  it('accepts the standard /Metadata prefix', () => {
+    const path = write('standard.rlog', rlog(
+      timestamp(0),
+      keyDef(0, '/Metadata/Build/gitVersion', 'string'),
+      stringValue(0, 'a1b2c3d4e5f6-dirty')
+    ))
+    expect(extractRlogMetadata(path)).toEqual({ 'Build/gitVersion': 'a1b2c3d4e5f6-dirty' })
   })
 
   it('ignores non-string and non-metadata keys', () => {
     const path = write('c.rlog', rlog(
       timestamp(0),
-      keyDef(0, 'RealMetadata/Odd', 'double'),
+      keyDef(0, '/Metadata/Odd', 'double'),
       doubleValue(0, 3),
       keyDef(1, 'RealOutputs/NotMeta', 'string'),
       stringValue(1, 'x')

@@ -390,7 +390,7 @@ drops and repopulates the derived tables on next open (§6.2). Metadata edits
 filters stay in step without a full rescan.
 
 `file_metadata` holds the key/value map PsiKit's `Logger.recordMetadata()` embeds in
-each `.rlog` (`RealMetadata/*` string records in the first log cycle — e.g. GitSHA,
+each `.rlog` (`/Metadata/*` string records in the first log cycle — e.g. GitSHA,
 GitBranch, OpMode name). `rlog/rlogMetadata.ts` decodes it from the *head* of the
 file only (128 KiB cap), at import (`reindexSession`) and full rebuild; the log file
 itself is the source of truth, so the table needs no `session.json` involvement.
