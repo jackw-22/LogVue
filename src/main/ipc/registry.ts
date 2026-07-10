@@ -15,10 +15,12 @@ import {
 } from '../services/index/indexService'
 import { createAdbClient } from '../services/adb/createAdbClient'
 import { listHubLogs } from '../services/adb/hublogs'
-import { importToNewSession, importToSession } from '../services/import/ImportService'
+import { importToSession } from '../services/import/ImportService'
 import { FtcScoutClient } from '../services/ftcscout/FtcScoutClient'
 import { syncFtcScoutEvent } from '../services/ftcscout/syncEvent'
 import { startArchiveWatcher } from '../services/watcher/Watcher'
+import { listTasks, startTask } from '../services/tasks/TaskService'
+import { runImportTask, runNewSessionImportTask } from '../services/import/importTask'
 
 /** One hub-log source wrapper for the app's lifetime; refreshed when source settings change. */
 let adb = createAdbClient(getSettings())
@@ -116,7 +118,31 @@ const handlers: Handlers = {
   },
   'archive:readNotes': async (path) => readNotes(path),
   'archive:writeNotes': async (path, md) => writeNotes(path, md),
-  'archive:rebuildIndex': async () => rebuild(getSettings().archiveRoot),
+  /**
+   * `rebuild` is synchronous (readdirSync + sync sqlite) and blocks main start to
+   * finish, so it can't report how far along it is — the task is indeterminate and
+   * the toast shimmers. Yield once first so the "started" snapshot reaches the
+   * renderer before the event loop stalls.
+   */
+  'archive:rebuildIndex': async () => {
+    const task = startTask({
+      kind: 'reindex',
+      title: 'Rebuilding index',
+      subtitle: 'Full rescan of the library',
+      determinate: false,
+      badge: 'DB LOCKED'
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    try {
+      const counts = rebuild(getSettings().archiveRoot)
+      task.patch({ title: 'Index rebuilt' })
+      task.succeed(`${counts.sessions} sessions · ${counts.files} files`)
+      return counts
+    } catch (err) {
+      task.fail(err)
+      throw err
+    }
+  },
   'index:query': async (query) => querySessions(getSettings().archiveRoot, query),
   'index:queryLogs': async (query) => queryLogs(getSettings().archiveRoot, query),
   'index:librarySize': async () => librarySizeBytes(getSettings().archiveRoot),
@@ -141,12 +167,41 @@ const handlers: Handlers = {
   },
 
   // ── import ──
+  // Single-file import stays untasked: it's the duplicate-resolution path, already
+  // driven from a modal that shows its own result.
   'import:toSession': async (req) => importToSession(adb, getSettings().archiveRoot, req),
-  'import:toNewSession': async (req) => importToNewSession(adb, getSettings().archiveRoot, req),
+  'import:batchToSession': async (req) => runImportTask(adb, getSettings().archiveRoot, req),
+  'import:toNewSession': async (req) => runNewSessionImportTask(adb, getSettings().archiveRoot, req),
+
+  // ── background tasks ──
+  'tasks:list': async () => listTasks(),
 
   // ── FTCScout ──
   'ftcscout:searchEvents': async (req) => ftcScout.searchEvents(req),
-  'ftcscout:syncEvent': async (req) => syncFtcScoutEvent(ftcScout, req)
+  'ftcscout:syncEvent': async (req) => {
+    const task = startTask({
+      kind: 'ftcscout',
+      title: `Syncing ${req.eventCode.trim().toUpperCase()}`,
+      subtitle: 'FTCScout · scaffolding matches',
+      targetPath: req.eventPath
+    })
+    try {
+      const result = await syncFtcScoutEvent(ftcScout, req, {
+        onPlan: (matches) => task.setItems(matches.map((m) => ({ ...m, bytes: null }))),
+        onMatchDone: (id, outcome) => task.itemStatus(id, 'done', outcome)
+      })
+      const label = result.event.name || result.event.code
+      task.patch({ title: `Synced ${label}` })
+      task.succeed(
+        `${result.created} created · ${result.updated} updated · ${result.unchanged} unchanged`,
+        req.eventPath
+      )
+      return result
+    } catch (err) {
+      task.fail(err)
+      throw err
+    }
+  }
 }
 
 /** Wire every contract channel to its handler. Call once on app ready. */

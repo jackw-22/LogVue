@@ -16,6 +16,13 @@ const api: Api = {
     }
     ipcRenderer.on('archive:changed', listener)
     return () => ipcRenderer.off('archive:changed', listener)
+  },
+  onTaskUpdate(handler) {
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof handler>[0]) => {
+      handler(payload)
+    }
+    ipcRenderer.on('tasks:update', listener)
+    return () => ipcRenderer.off('tasks:update', listener)
   }
 }
 

@@ -1,4 +1,5 @@
 import type { ArchiveChangedEvent, IpcApi } from './ipc'
+import type { Task } from './tasks'
 
 /**
  * The allow-listed surface exposed on `window.api` by the preload bridge.
@@ -11,6 +12,8 @@ export interface Api {
     ...args: Parameters<IpcApi[K]>
   ): ReturnType<IpcApi[K]>
   onArchiveChanged(handler: (event: ArchiveChangedEvent) => void): () => void
+  /** A full snapshot of one background task, pushed on every change. */
+  onTaskUpdate(handler: (task: Task) => void): () => void
 }
 
 declare global {

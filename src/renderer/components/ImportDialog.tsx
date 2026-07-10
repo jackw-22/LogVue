@@ -3,7 +3,7 @@ import { SELECTABLE_SESSION_TYPES, SESSION_TYPE_LABELS } from '@shared/constants
 import type { SessionType, SessionNode } from '@shared/types/session'
 import type { HubLog, HubTimeSample } from '@shared/types/hublog'
 import type { HubLogRef, ImportResult } from '@shared/types/import'
-import { useArchiveTree, useImportToNewSession, useImportToSession } from '../api/hooks'
+import { useArchiveTree, useImportBatchToSession, useImportToNewSession } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
 import { correctedHubTimestamp } from '../lib/time'
 
@@ -71,21 +71,24 @@ export default function ImportDialog({
   const [newParent, setNewParent] = useState(archiveRoot)
   const [entries, setEntries] = useState<Entry[] | null>(null)
 
-  const importOne = useImportToSession()
+  const importBatch = useImportBatchToSession()
   const importNew = useImportToNewSession()
   const select = useAppStore((s) => s.select)
 
-  const running = importOne.isPending || importNew.isPending
+  const running = importBatch.isPending || importNew.isPending
   const duplicates = entries?.filter((e) => e.result.status === 'duplicate') ?? []
 
-  /** Import every selected log into `targetPath` in order, returning the entries. */
-  async function importAllInto(path: string, force: boolean): Promise<Entry[]> {
-    const out: Entry[] = []
-    for (const log of logs) {
-      const result = await importOne.mutateAsync({ ...toRef(log, correctHubTime, hubTime), sessionPath: path, force })
-      out.push({ log, result })
-    }
-    return out
+  /**
+   * Import every selected log into `targetPath`. The loop runs in main so the whole
+   * batch shows up as one activity toast; results come back one per log, in order.
+   */
+  async function importAllInto(path: string, force: boolean, subset = logs): Promise<Entry[]> {
+    const results = await importBatch.mutateAsync({
+      sessionPath: path,
+      logs: subset.map((log) => toRef(log, correctHubTime, hubTime)),
+      force
+    })
+    return results.map((result, i) => ({ log: subset[i], result }))
   }
 
   async function submit(e: React.FormEvent) {
@@ -110,11 +113,11 @@ export default function ImportDialog({
 
   /** Re-run just the held duplicates, forcing a copy (spec §14 "Import another copy"). */
   async function forceDuplicates() {
-    const forced: Entry[] = []
-    for (const { log } of duplicates) {
-      const result = await importOne.mutateAsync({ ...toRef(log, correctHubTime, hubTime), sessionPath: targetPath, force: true })
-      forced.push({ log, result })
-    }
+    const forced = await importAllInto(
+      targetPath,
+      true,
+      duplicates.map((d) => d.log)
+    )
     setEntries((prev) =>
       (prev ?? []).map((e) => forced.find((f) => f.log.remote_path === e.log.remote_path) ?? e)
     )
@@ -247,9 +250,13 @@ function Results({ entries }: { entries: Entry[] }): JSX.Element {
             <span className="pill imported" title={result.session.path}>
               ✓ {result.session.metadata.display_name}
             </span>
-          ) : (
+          ) : result.status === 'duplicate' ? (
             <span className="pill new" title={result.existing.map((e) => e.sessionPath).join('\n')}>
               Already in {result.existing[0]?.sessionLabel ?? 'library'}
+            </span>
+          ) : (
+            <span className="pill failed" title={result.error}>
+              ✕ {result.error}
             </span>
           )}
         </li>

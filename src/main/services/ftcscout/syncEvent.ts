@@ -15,9 +15,20 @@ interface SyncSource {
   fromCache: boolean
 }
 
+/** Progress taps for the activity toast stack; the sync is unchanged without them. */
+export interface SyncHooks {
+  /** The matches we're about to scaffold, once the event has been fetched. */
+  onPlan?(matches: Array<{ id: string; label: string }>): void
+  onMatchDone?(id: string, outcome: 'created' | 'updated' | 'unchanged'): void
+}
+
+/** Let the main event loop flush queued IPC before the next synchronous match write. */
+const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+
 export async function syncFtcScoutEvent(
   client: FtcScoutClient,
-  req: FtcScoutSyncRequest
+  req: FtcScoutSyncRequest,
+  hooks?: SyncHooks
 ): Promise<FtcScoutSyncResult> {
   const root = getSettings().archiveRoot
   const store = getIndexStore(root)
@@ -60,7 +71,15 @@ export async function syncFtcScoutEvent(
   let updated = 0
   let unchanged = 0
 
+  hooks?.onPlan?.(
+    source.event.matches.map((m) => ({
+      id: String(m.ftcscoutId),
+      label: `${m.match.label ?? m.description} ${formatMatchStation(m.match)}`.trim()
+    }))
+  )
+
   for (const match of source.event.matches) {
+    await tick()
     const existingDir = existing.get(match.ftcscoutId)
     const now = new Date().toISOString()
     const displayName = `${match.match.label ?? match.description} ${formatMatchStation(match.match)}`.trim()
@@ -81,6 +100,7 @@ export async function syncFtcScoutEvent(
       writeMetadata(dir, metadata)
       reindexSession(root, dir)
       created += 1
+      hooks?.onMatchDone?.(String(match.ftcscoutId), 'created')
       continue
     }
 
@@ -98,9 +118,11 @@ export async function syncFtcScoutEvent(
     }
     if (JSON.stringify(metadata) === JSON.stringify(next)) {
       unchanged += 1
+      hooks?.onMatchDone?.(String(match.ftcscoutId), 'unchanged')
     } else {
       writeMetadata(existingDir, next)
       updated += 1
+      hooks?.onMatchDone?.(String(match.ftcscoutId), 'updated')
     }
     reindexSession(root, existingDir)
   }

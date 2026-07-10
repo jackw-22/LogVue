@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AppSettings, CreateSessionInput, SessionMetadata } from '@shared/types/session'
 import type {
+  BatchImportRequest,
   HubLogRef,
   ImportRequest,
   NewSessionImportRequest
@@ -278,6 +279,20 @@ export function useImportToSession() {
     mutationFn: (req: ImportRequest) => api.import.toSession(req),
     onSuccess: (res) => {
       if (res.status === 'imported') refresh()
+    }
+  })
+}
+
+/**
+ * Import several logs into one existing session. The loop lives in main so the batch
+ * is a single activity toast; results come back one per log, in order.
+ */
+export function useImportBatchToSession() {
+  const refresh = useImportRefresh()
+  return useMutation({
+    mutationFn: (req: BatchImportRequest) => api.import.batchToSession(req),
+    onSuccess: (results) => {
+      if (results.some((r) => r.status === 'imported')) refresh()
     }
   })
 }

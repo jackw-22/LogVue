@@ -12,6 +12,7 @@ import HubLogTable from './components/HubLogTable'
 import EmptyState from './components/EmptyState'
 import NewSessionDialog from './components/NewSessionDialog'
 import SettingsDialog from './components/SettingsDialog'
+import ActivityToasts from './components/ActivityToasts'
 
 // Toggle to make typing anywhere jump to the Library search box (disabled: felt intrusive).
 const TYPE_TO_SEARCH = false
@@ -112,6 +113,7 @@ export default function App(): JSX.Element {
         />
       )}
       {showSettings && <SettingsDialog settings={settings} onClose={() => setShowSettings(false)} />}
+      <ActivityToasts />
     </div>
   )
 }

@@ -38,10 +38,22 @@ export interface ImportedFileLocation {
  * Result of an import. `duplicate` is returned (without pulling) when the same
  * remote file is already imported and the request didn't `force` — the renderer
  * then offers Cancel / Import another copy (spec §14).
+ *
+ * `failed` only ever comes back from a *batch* import, where one unreadable file
+ * must not abandon the rest. A single `import:toSession` still throws.
  */
 export type ImportResult =
   | { status: 'imported'; session: Session; file: SessionFile }
   | { status: 'duplicate'; existing: ImportedFileLocation[] }
+  | { status: 'failed'; error: string }
+
+/** Import several logs into one existing session, in order (spec §7.4 batch). */
+export interface BatchImportRequest {
+  sessionPath: string
+  logs: HubLogRef[]
+  /** Import even when a duplicate is detected — spec §14 "Import another copy". */
+  force?: boolean
+}
 
 /** Create a fresh session, then import the selected logs into it (spec §10 general workflow). */
 export interface NewSessionImportRequest {

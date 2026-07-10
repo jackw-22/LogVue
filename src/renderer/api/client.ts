@@ -1,6 +1,11 @@
 import '@shared/types/api' // registers the window.api global type
 import type { CreateSessionInput, SessionMetadata } from '@shared/types/session'
-import type { HubLogRef, ImportRequest, NewSessionImportRequest } from '@shared/types/import'
+import type {
+  BatchImportRequest,
+  HubLogRef,
+  ImportRequest,
+  NewSessionImportRequest
+} from '@shared/types/import'
 import type { SessionQuery } from '@shared/types/query'
 import type { FtcScoutEventSearchRequest, FtcScoutSyncRequest } from '@shared/types/ftcscout'
 
@@ -47,7 +52,11 @@ export const api = {
   },
   import: {
     toSession: (req: ImportRequest) => window.api.invoke('import:toSession', req),
+    batchToSession: (req: BatchImportRequest) => window.api.invoke('import:batchToSession', req),
     toNewSession: (req: NewSessionImportRequest) => window.api.invoke('import:toNewSession', req)
+  },
+  tasks: {
+    list: () => window.api.invoke('tasks:list')
   },
   ftcscout: {
     searchEvents: (req: FtcScoutEventSearchRequest) => window.api.invoke('ftcscout:searchEvents', req),

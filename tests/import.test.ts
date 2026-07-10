@@ -4,7 +4,12 @@ import { tmpdir } from 'os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { guessFileKind } from '../src/main/services/import/fileKind'
 import { findDuplicates, type ImportIdentity } from '../src/main/services/import/identity'
-import { importToNewSession, importToSession } from '../src/main/services/import/ImportService'
+import {
+  importBatchToSession,
+  importToNewSession,
+  importToSession,
+  type ImportHooks
+} from '../src/main/services/import/ImportService'
 import { uniqueFilePath } from '../src/main/services/archive/paths'
 import { createSession } from '../src/main/services/archive/ArchiveService'
 import type { AdbLike } from '../src/main/services/adb/AdbClient'
@@ -191,5 +196,74 @@ describe('importToNewSession', () => {
     const meta = JSON.parse(readFileSync(join(res.session.path, 'session.json'), 'utf-8'))
     expect(meta.files).toHaveLength(2)
     expect(existsSync(join(res.session.path, 'DriveTest_log_1.rlog'))).toBe(true)
+  })
+})
+
+/**
+ * A batch is one activity task, so one bad file must not abandon the files behind it
+ * (the toast shows it as failed, with a Retry). A lone `importToSession` still throws.
+ */
+describe('importBatchToSession', () => {
+  let root: string
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'logvue-imp3-'))
+  })
+  afterEach(() => rmSync(root, { recursive: true, force: true }))
+
+  const logs: HubLogRef[] = [
+    { remotePath: '/p/A_log_1.rlog', filename: 'A_log_1.rlog', fileSize: 3 },
+    { remotePath: '/p/B_log_1.rlog', filename: 'B_log_1.rlog', fileSize: 3 },
+    { remotePath: '/p/C_log_1.rlog', filename: 'C_log_1.rlog', fileSize: 3 }
+  ]
+
+  /** Fails only on B, so we can see C still land. */
+  const flakyAdb = {
+    pull: vi.fn(async (remote: string, dest: string) => {
+      if (remote.includes('B_log_1')) throw new Error('device busy')
+      writeFileSync(dest, 'log')
+    })
+  }
+
+  it('records a failed file and keeps importing the rest', async () => {
+    const session = createSession({ parentPath: root, displayName: 'Q4', sessionType: 'official_match' })
+    const results = await importBatchToSession(flakyAdb as unknown as AdbLike, null, {
+      sessionPath: session.path,
+      logs
+    })
+
+    expect(results.map((r) => r.status)).toEqual(['imported', 'failed', 'imported'])
+    expect(results[1]).toEqual({ status: 'failed', error: 'device busy' })
+    expect(existsSync(join(session.path, 'C_log_1.rlog'))).toBe(true)
+
+    const meta = JSON.parse(readFileSync(join(session.path, 'session.json'), 'utf-8'))
+    expect(meta.files.map((f: { filename: string }) => f.filename)).toEqual([
+      'A_log_1.rlog',
+      'C_log_1.rlog'
+    ])
+  })
+
+  it('reports per-file progress through the hooks', async () => {
+    const session = createSession({ parentPath: root, displayName: 'Q4', sessionType: 'official_match' })
+    const started: string[] = []
+    const ended: Array<[string, string]> = []
+    const hooks: ImportHooks = {
+      onFileStart: (remotePath) => started.push(remotePath),
+      onFileEnd: (remotePath, result) => ended.push([remotePath, result.status])
+    }
+
+    await importBatchToSession(
+      flakyAdb as unknown as AdbLike,
+      null,
+      { sessionPath: session.path, logs },
+      hooks
+    )
+
+    // B starts (the pull is attempted) but ends failed; every file reports an end.
+    expect(started).toEqual(logs.map((l) => l.remotePath))
+    expect(ended).toEqual([
+      ['/p/A_log_1.rlog', 'imported'],
+      ['/p/B_log_1.rlog', 'failed'],
+      ['/p/C_log_1.rlog', 'imported']
+    ])
   })
 })

@@ -20,12 +20,14 @@ import type {
 import type { AdbStatus, HubLog, HubTimeSample } from './hublog'
 import type { LogQueryRow, SessionQuery, SessionQueryResult } from './query'
 import type {
+  BatchImportRequest,
   HubLogRef,
   ImportRequest,
   ImportResult,
   NewSessionImportRequest,
   NewSessionImportResult
 } from './import'
+import type { Task } from './tasks'
 import type {
   FtcScoutEventSearchRequest,
   FtcScoutEventSearchResult,
@@ -105,8 +107,18 @@ export interface IpcApi {
   // ── import (pull → copy → append → index; spec §7.4, §14) ──
   /** Import a remote log into an existing session. `duplicate` when already imported. */
   'import:toSession': (req: ImportRequest) => Promise<ImportResult>
+  /**
+   * Import several logs into one existing session. The loop lives in main so the whole
+   * batch is a single progress task; a failed file yields a `failed` result rather than
+   * abandoning the ones behind it. One result per requested log, in order.
+   */
+  'import:batchToSession': (req: BatchImportRequest) => Promise<ImportResult[]>
   /** Create a session from selected logs, then import them into it (spec §10). */
   'import:toNewSession': (req: NewSessionImportRequest) => Promise<NewSessionImportResult>
+
+  // ── background tasks (activity toasts) ─────────────────────
+  /** Live + recently-finished tasks; replayed when a renderer mounts mid-flight. */
+  'tasks:list': () => Promise<Task[]>
 
   // ── FTCScout (online fetch + sqlite cache; spec competition workflow) ──
   /** Search FTCScout events by name/code for the add-session dialog. */
