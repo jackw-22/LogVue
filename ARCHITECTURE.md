@@ -243,6 +243,9 @@ interface Api {
   'adb:status':      () => { connected: boolean; device?: string; adbMissing?: boolean };
   'adb:listHubLogs': () => HubLog[];                    // ls + parse + status
 
+  // ── MCP ──────────────────────────────────────────────────
+  'mcp:status':      () => McpStatus;                    // endpoint + discovery + last request
+
   // ── archive / sessions ───────────────────────────────────
   'archive:tree':        () => SessionNode[];           // for SessionTree
   'archive:getSession':  (path: string) => Session;

@@ -16,7 +16,7 @@ const Discovery = z.object({
 
 async function main(): Promise<void> {
   const requestedPath = process.argv[2]
-  if (!requestedPath) throw new Error('Usage: logvue-mcp-bridge <archive>/.logvue/mcp.json')
+  if (!requestedPath) throw new Error('Usage: logvue-mcp-bridge <LogVue user-data>/mcp.json')
   const discovery = Discovery.parse(JSON.parse(readFileSync(resolve(requestedPath), 'utf8')))
   const host = (await portIsOpen('127.0.0.1', discovery.port)) ? '127.0.0.1' : windowsHostFromDefaultRoute()
   const url = new URL(`http://${host}:${discovery.port}${discovery.path}`)

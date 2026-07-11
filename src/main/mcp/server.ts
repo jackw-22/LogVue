@@ -5,8 +5,9 @@ import {
   type ServerResponse
 } from 'node:http'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
+import { app } from 'electron'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
@@ -20,6 +21,7 @@ import { reindexSession } from '../services/index/indexService'
 import { notifyArchiveChanged } from '../services/watcher/Watcher'
 import { INTERNAL_DIR } from '../services/archive/paths'
 import { SESSION_TYPES } from '@shared/constants/sessionTypes'
+import type { McpStatus } from '@shared/types/ipc'
 
 export const MCP_HOST = '0.0.0.0'
 export const MCP_PORT = 47831
@@ -29,6 +31,42 @@ export const MCP_DISCOVERY_FILE = 'mcp.json'
 let httpServer: HttpServer | null = null
 let bearerToken: string | null = null
 let discoveryPath: string | null = null
+let lastRequestAt: string | null = null
+
+function appDiscoveryPath(): string {
+  return join(app.getPath('userData'), MCP_DISCOVERY_FILE)
+}
+
+function loadStableBearerToken(): string {
+  const candidates = [appDiscoveryPath()]
+  const archiveRoot = getSettings().archiveRoot
+  if (archiveRoot) candidates.push(join(archiveRoot, INTERNAL_DIR, MCP_DISCOVERY_FILE))
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(readFileSync(candidate, 'utf8')) as { token?: unknown }
+      if (typeof parsed.token === 'string' && parsed.token.length >= 32) return parsed.token
+    } catch {
+      // Try the next location, then generate a new credential below.
+    }
+  }
+  return randomBytes(32).toString('base64url')
+}
+
+export function getMcpStatus(): McpStatus {
+  const path = discoveryPath ?? appDiscoveryPath()
+  return {
+    running: httpServer !== null,
+    discoveryReady: existsSync(path),
+    endpoint: `http://127.0.0.1:${MCP_PORT}${MCP_PATH}`,
+    discoveryPath: path,
+    lastRequestAt
+  }
+}
+
+export function getMcpToken(): string {
+  if (!bearerToken) throw new Error('MCP server is not running')
+  return bearerToken
+}
 
 function result(value: unknown) {
   return {
@@ -71,11 +109,11 @@ function createLogVueMcpServer(): McpServer {
     'get_status',
     {
       title: 'Get LogVue status',
-      description: 'Return the configured archive and current ADB connection status.',
+      description: 'Return the configured archive, MCP endpoint, and current ADB connection status.',
       inputSchema: z.object({}),
       annotations: { readOnlyHint: true }
     },
-    async () => result({ settings: getSettings(), adb: await getAdbClient().getStatus() })
+    async () => result({ settings: getSettings(), adb: await getAdbClient().getStatus(), mcp: getMcpStatus() })
   )
 
   server.registerTool(
@@ -152,7 +190,8 @@ function createLogVueMcpServer(): McpServer {
 
 export async function startMcpServer(): Promise<void> {
   if (httpServer) return
-  bearerToken = randomBytes(32).toString('base64url')
+  bearerToken = loadStableBearerToken()
+  lastRequestAt = null
 
   httpServer = createServer((req, res) => {
     if (req.url !== MCP_PATH) {
@@ -168,6 +207,7 @@ export async function startMcpServer(): Promise<void> {
       res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null }))
       return
     }
+    lastRequestAt = new Date().toISOString()
     void handleMcpRequest(req, res)
   })
 
@@ -224,20 +264,25 @@ function isLoopbackHostname(url: string): boolean {
 }
 
 function writeDiscoveryFile(token: string): void {
-  const root = getSettings().archiveRoot
-  if (!root) return
-  const internalDir = join(root, INTERNAL_DIR)
-  mkdirSync(internalDir, { recursive: true })
-  discoveryPath = join(internalDir, MCP_DISCOVERY_FILE)
+  const nextPath = appDiscoveryPath()
+  mkdirSync(app.getPath('userData'), { recursive: true })
   writeFileSync(
-    discoveryPath,
+    nextPath,
     JSON.stringify({ version: 1, port: MCP_PORT, path: MCP_PATH, token, pid: process.pid }, null, 2) + '\n',
     { encoding: 'utf8', mode: 0o600 }
   )
+  discoveryPath = nextPath
+}
+
+/** Recreate the app-level discovery file without changing the stable credential. */
+export function refreshMcpDiscoveryFile(): void {
+  if (!httpServer || !bearerToken) return
+  if (discoveryPath) rmSync(discoveryPath, { force: true })
+  discoveryPath = null
+  writeDiscoveryFile(bearerToken)
 }
 
 export async function stopMcpServer(): Promise<void> {
-  if (discoveryPath) rmSync(discoveryPath, { force: true })
   discoveryPath = null
   const currentHttp = httpServer
   httpServer = null
@@ -246,4 +291,5 @@ export async function stopMcpServer(): Promise<void> {
     currentHttp.close(() => resolveClosed())
   })
   bearerToken = null
+  lastRequestAt = null
 }

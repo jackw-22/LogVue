@@ -1,21 +1,31 @@
 import { useQueryClient } from '@tanstack/react-query'
 import type { AppSettings } from '@shared/types/session'
-import { useAdbStatus, useConnectAdb, usePickArchiveRoot, useRebuildIndex } from '../api/hooks'
+import type { McpStatus } from '@shared/types/ipc'
+import {
+  useAdbStatus,
+  useConnectAdb,
+  useMcpStatus,
+  usePickArchiveRoot,
+  useRebuildIndex
+} from '../api/hooks'
+import { formatRelative } from '../lib/time'
 import { useAppStore } from '../stores/appStore'
 
 interface Props {
   settings: AppSettings
   onNewTopLevel: () => void
   onSettings: () => void
+  onMcpSetup: () => void
 }
 
-export default function Toolbar({ settings, onNewTopLevel, onSettings }: Props): JSX.Element {
+export default function Toolbar({ settings, onNewTopLevel, onSettings, onMcpSetup }: Props): JSX.Element {
   const pick = usePickArchiveRoot()
   const rebuild = useRebuildIndex()
   const qc = useQueryClient()
   const view = useAppStore((s) => s.view)
   const setView = useAppStore((s) => s.setView)
   const { data: adb } = useAdbStatus()
+  const { data: mcp } = useMcpStatus()
   const connect = useConnectAdb()
   const sourceIsFolder = settings.hubDataSource === 'folder'
   const sourceName = sourceIsFolder ? 'Folder Import' : 'Control Hub'
@@ -75,6 +85,8 @@ export default function Toolbar({ settings, onNewTopLevel, onSettings }: Props):
 
       <div className="spacer" />
 
+      <McpBadge status={mcp} onClick={onMcpSetup} />
+
       <button className="ghost sm" onClick={onSettings}>
         Settings
       </button>
@@ -100,6 +112,36 @@ export default function Toolbar({ settings, onNewTopLevel, onSettings }: Props):
       )}
 
     </header>
+  )
+}
+
+function McpBadge({ status, onClick }: { status: McpStatus | undefined; onClick: () => void }): JSX.Element {
+  const available = !!status?.running && !!status.discoveryReady
+  const availabilityLabel = !status
+    ? 'MCP checking…'
+    : available
+      ? 'MCP available'
+      : status.running
+        ? 'MCP waiting for library'
+        : 'MCP unavailable'
+  const requestLabel =
+    available && status
+      ? status.lastRequestAt
+        ? `last request ${formatRelative(status.lastRequestAt)}`
+        : 'no requests yet'
+      : null
+
+  return (
+    <button
+      type="button"
+      className={`source-status mcp-status ${available ? 'ok' : 'off'}`}
+      title="Open MCP setup instructions"
+      onClick={onClick}
+    >
+      <span className="dot" />
+      <span>{availabilityLabel}</span>
+      {requestLabel && <span className="mcp-request-age">· {requestLabel}</span>}
+    </button>
   )
 }
 

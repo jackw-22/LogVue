@@ -17,6 +17,7 @@ const keys = {
   files: (path: string) => ['archive', 'files', path] as const,
   notes: (path: string) => ['archive', 'notes', path] as const,
   adbStatus: ['adb', 'status'] as const,
+  mcpStatus: ['mcp', 'status'] as const,
   hubTime: ['adb', 'hubTime'] as const,
   hubLogs: ['adb', 'hubLogs'] as const,
   query: (q: SessionQuery) => ['index', 'query', q] as const,
@@ -295,6 +296,20 @@ export function useAdbStatus() {
     refetchInterval: 4000,
     refetchOnWindowFocus: true
   })
+}
+
+/** MCP is a stateless HTTP endpoint, so poll its availability and last request time. */
+export function useMcpStatus() {
+  return useQuery({
+    queryKey: keys.mcpStatus,
+    queryFn: api.mcp.status,
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true
+  })
+}
+
+export function useMcpToken() {
+  return useMutation({ mutationFn: api.mcp.getToken })
 }
 
 export function useConnectAdb() {

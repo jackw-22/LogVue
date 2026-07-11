@@ -12,6 +12,7 @@ import HubLogTable from './components/HubLogTable'
 import EmptyState from './components/EmptyState'
 import NewSessionDialog from './components/NewSessionDialog'
 import SettingsDialog from './components/SettingsDialog'
+import McpSetupDialog from './components/McpSetupDialog'
 import ActivityToasts from './components/ActivityToasts'
 
 // Toggle to make typing anywhere jump to the Library search box (disabled: felt intrusive).
@@ -31,6 +32,7 @@ export default function App(): JSX.Element {
   // When set, holds the parent folder we're creating a session under.
   const [newParent, setNewParent] = useState<{ path: string; label: string } | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showMcpSetup, setShowMcpSetup] = useState(false)
 
   // Typing anywhere outside an input jumps to the Library view's search/dashboard.
   useEffect(() => {
@@ -77,6 +79,7 @@ export default function App(): JSX.Element {
         settings={settings}
         onNewTopLevel={() => setNewParent({ path: settings.archiveRoot as string, label: 'Library' })}
         onSettings={() => setShowSettings(true)}
+        onMcpSetup={() => setShowMcpSetup(true)}
       />
 
       {view === 'device' ? (
@@ -113,6 +116,9 @@ export default function App(): JSX.Element {
         />
       )}
       {showSettings && <SettingsDialog settings={settings} onClose={() => setShowSettings(false)} />}
+      {showMcpSetup && (
+        <McpSetupDialog archiveRoot={settings.archiveRoot} onClose={() => setShowMcpSetup(false)} />
+      )}
       <ActivityToasts />
     </div>
   )

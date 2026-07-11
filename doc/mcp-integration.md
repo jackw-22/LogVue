@@ -24,22 +24,24 @@ Codex in WSL
   -> LogVue Electron main process
 ```
 
-LogVue permits unauthenticated loopback access and requires a per-launch 256-bit bearer token for non-loopback requests. Connection information exists while LogVue runs at:
+LogVue permits unauthenticated loopback access and requires a stable random 256-bit bearer token for non-loopback requests. Connection information is stored at the app-level path:
 
 ```text
-<archive-root>/.logvue/mcp.json
+<user-data>/mcp.json
 ```
+
+The active archive is not part of the bridge configuration. Agents discover it from `get_status`, and all archive tools follow the library currently selected in LogVue.
 
 The bridge tries `127.0.0.1` first. If unavailable, it reads WSL's default route to find the current Windows NAT gateway and authenticates with the discovery token.
 
 ## Codex installation
 
-Build and launch LogVue, then confirm `.logvue/mcp.json` exists. Register the bridge from WSL using WSL-visible paths:
+Build and launch LogVue, then confirm `<user-data>/mcp.json` exists. Register the bridge from WSL using the WSL-visible path:
 
 ```sh
 codex mcp add logvue -- \
   node /path/to/LogVue/out/main/mcpBridge.js \
-  /path/to/archive/.logvue/mcp.json
+  /path/to/LogVue/user-data/mcp.json
 ```
 
 Fully restart Codex after configuration or tool-schema changes. Resuming a conversation is supported:
@@ -54,7 +56,7 @@ Inspect configuration with `codex mcp get logvue` and `codex mcp list`.
 
 ### `get_status`
 
-Returns application settings and the current ADB/folder-source connection status.
+Returns application settings, MCP endpoint status, and the current ADB/folder-source connection status.
 
 ### `list_hub_logs`
 
@@ -90,7 +92,7 @@ Imports one exact `remote_path` returned by `list_hub_logs`. The remote log is r
 
 Agents should use normal filesystem tools for archive traversal, `session.json`, `notes.md`, grep, bulk analysis, and specialised log inspection. The archive watcher rebuilds the derived index and refreshes the renderer after direct edits.
 
-Agents must not edit `.logvue`, including `index.sqlite` and `mcp.json`.
+Agents must not edit LogVue's internal data, including `index.sqlite` and the app-level `mcp.json`.
 
 ## Verification
 
@@ -106,7 +108,7 @@ The current checkpoint passes the production build, full typecheck, and all 123 
 
 ## Troubleshooting
 
-- Missing `mcp.json`: LogVue is not running the MCP-enabled build, has no archive configured, or shut down cleanly.
+- Missing `mcp.json`: LogVue has not started the MCP-enabled build on this user profile yet.
 - WSL `127.0.0.1` fails in NAT mode: use the stdio bridge rather than the direct HTTP URL.
 - HTTP 500 during initialization: ensure each stateless POST creates a fresh MCP server and transport.
 - Codex retains an old failure: fully exit Codex and resume it so configuration and schemas reload.

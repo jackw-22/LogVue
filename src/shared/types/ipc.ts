@@ -44,6 +44,15 @@ export interface AppInfo {
   platform: NodeJS.Platform
 }
 
+/** Live state of the stateless MCP HTTP endpoint and its app-level discovery file. */
+export interface McpStatus {
+  running: boolean
+  discoveryReady: boolean
+  endpoint: string
+  discoveryPath: string
+  lastRequestAt: string | null
+}
+
 export interface ArchiveChangedEvent {
   root: string
   paths: string[]
@@ -55,6 +64,12 @@ export interface IpcApi {
   'app:ping': (msg: string) => Promise<string>
   /** Versions/platform, proving main can answer typed queries. */
   'app:getInfo': () => Promise<AppInfo>
+
+  // ── MCP ────────────────────────────────────────────────────
+  /** Whether the MCP endpoint and app-level discovery file are available. */
+  'mcp:status': () => Promise<McpStatus>
+  /** Return the current MCP bearer token for an explicit user copy action. */
+  'mcp:getToken': () => Promise<string>
 
   // ── settings / archive root ────────────────────────────────
   'settings:get': () => Promise<AppSettings>

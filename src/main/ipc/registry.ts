@@ -18,6 +18,7 @@ import { getAdbClient, refreshAdbClient } from '../services/adb/runtime'
 import { FtcScoutClient } from '../services/ftcscout/FtcScoutClient'
 import { syncFtcScoutEvent } from '../services/ftcscout/syncEvent'
 import { startArchiveWatcher } from '../services/watcher/Watcher'
+import { getMcpStatus, getMcpToken, refreshMcpDiscoveryFile } from '../mcp/server'
 import { listTasks, startTask } from '../services/tasks/TaskService'
 import { runImportTask, runNewSessionImportTask, runSingleImportTask } from '../services/import/importTask'
 
@@ -41,6 +42,10 @@ const handlers: Handlers = {
     platform: process.platform
   }),
 
+  // ── MCP ──
+  'mcp:status': async () => getMcpStatus(),
+  'mcp:getToken': async () => getMcpToken(),
+
   // ── settings / archive root ──
   'settings:get': async () => getSettings(),
   'settings:pickArchiveRoot': async () => {
@@ -56,6 +61,7 @@ const handlers: Handlers = {
     // A new root gets a fresh index built from its contents (§6.2).
     ensureIndexBuilt(next.archiveRoot)
     startArchiveWatcher(next.archiveRoot)
+    refreshMcpDiscoveryFile()
     return next
   },
   'settings:setTeamNumber': async (teamNumber) => saveSettings({ teamNumber }),

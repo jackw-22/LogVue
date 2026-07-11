@@ -12,6 +12,10 @@ import type { FtcScoutEventSearchRequest, FtcScoutSyncRequest } from '@shared/ty
 /** Thin, typed wrappers over the preload bridge — one call site per channel. */
 export const api = {
   getInfo: () => window.api.invoke('app:getInfo'),
+  mcp: {
+    status: () => window.api.invoke('mcp:status'),
+    getToken: () => window.api.invoke('mcp:getToken')
+  },
   settings: {
     get: () => window.api.invoke('settings:get'),
     pickRoot: () => window.api.invoke('settings:pickArchiveRoot'),

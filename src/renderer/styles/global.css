@@ -261,6 +261,17 @@ input[type="checkbox"] {
 .source-status.ok .dot {
   background: var(--good);
 }
+.mcp-request-age {
+  color: var(--muted);
+  font-weight: 400;
+}
+.mcp-status {
+  cursor: pointer;
+}
+.mcp-status:hover {
+  background: var(--panel-2);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
 .source-status.off .dot {
   background: color-mix(in srgb, var(--warn) 70%, transparent);
 }
@@ -1366,6 +1377,46 @@ button.chip.meta.more {
 }
 .settings-modal {
   width: min(560px, 94vw);
+}
+.mcp-setup-modal {
+  width: min(720px, 94vw);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.mcp-setup-intro {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.mcp-setup-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.mcp-setup-state.available {
+  color: var(--good);
+}
+.mcp-setup-state.available .dot {
+  background: var(--good);
+}
+.mcp-setup-state.unavailable .dot {
+  background: color-mix(in srgb, var(--warn) 70%, transparent);
+}
+.mcp-command {
+  display: block;
+  padding: 9px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.mcp-copy-button {
+  align-self: flex-start;
 }
 .settings-section {
   display: flex;

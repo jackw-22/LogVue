@@ -6,21 +6,21 @@ While the LogVue desktop application is running, it exposes an MCP Streamable HT
 http://127.0.0.1:47831/mcp
 ```
 
-The server is hosted by Electron's main process. MCP-triggered imports therefore use the same ADB client, archive services, index, and Activity task registry as renderer-triggered imports. Non-loopback requests require the per-launch bearer token written to `<archive>/.logvue/mcp.json`.
+The server is hosted by Electron's main process. MCP-triggered imports therefore use the same ADB client, archive services, index, and Activity task registry as renderer-triggered imports. Non-loopback requests require the stable random bearer token written to LogVue's app-level `<userData>/mcp.json`.
 
 ## Codex configuration
 
-For a configuration that works in both WSL NAT and mirrored networking, have Codex launch the included bridge. Replace the discovery path with the WSL path to your archive:
+For a configuration that works in both WSL NAT and mirrored networking, have Codex launch the included bridge. Replace the discovery path with the WSL path to LogVue's app-level discovery file:
 
 ```sh
-codex mcp add logvue -- node /path/to/LogVue/out/main/mcpBridge.js /path/to/archive/.logvue/mcp.json
+codex mcp add logvue -- node /path/to/LogVue/out/main/mcpBridge.js /path/to/LogVue/user-data/mcp.json
 ```
 
-The bridge first tries loopback. If that is unavailable, it discovers the current Windows host from WSL's default route and authenticates using the discovery file. The Codex configuration therefore remains stable when the WSL networking mode or NAT gateway changes.
+Replace `/path/to/LogVue/user-data` with the user-data directory shown in LogVue Settings. The bridge first tries loopback. If that is unavailable, it discovers the current Windows host from WSL's default route and authenticates using the app-level discovery file. The Codex configuration therefore remains stable when the WSL networking mode, active library, or NAT gateway changes.
 
 ## Tools
 
-- `get_status`: configured archive and ADB status.
+- `get_status`: configured archive, MCP endpoint, and ADB status.
 - `list_hub_logs`: newest RLOG files available from the configured Control Hub or folder source (20 by default, up to 100).
 - `create_session`: creates a schema-valid session at the archive root or beneath an existing folder.
 - `import_hub_log`: imports one listed remote log into an existing archive session.
