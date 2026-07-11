@@ -451,6 +451,15 @@ input[type="checkbox"] {
 .hublog-table tbody tr:hover {
   background: var(--panel-2);
 }
+.hublog-table tbody tr {
+  cursor: pointer;
+}
+.hublog-table tbody tr.is-selected {
+  background: color-mix(in srgb, var(--accent) 11%, var(--panel));
+}
+.hublog-table tbody tr.is-selected:hover {
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel-2));
+}
 .hublog-table tbody tr.tint-red:hover {
   background: color-mix(in srgb, var(--tint-red) 100%, var(--panel-2));
 }

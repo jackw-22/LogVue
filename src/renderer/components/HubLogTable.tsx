@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ADB_NOT_FOUND_HINT } from '@shared/constants/adb'
 import { formatBytes } from '@shared/format/bytes'
 import type { SessionNode } from '@shared/types/session'
@@ -40,6 +40,7 @@ export default function HubLogTable(): JSX.Element {
   const [showIgnored, setShowIgnored] = useState(false)
   const [correctHubTime, setCorrectHubTime] = useState(true)
   const [dialog, setDialog] = useState<{ logs: HubLog[]; mode: 'existing' | 'new' } | null>(null)
+  const selectionAnchor = useRef<string | null>(null)
 
   const ignore = useIgnoreHubLog()
   const unignore = useUnignoreHubLog()
@@ -81,16 +82,35 @@ export default function HubLogTable(): JSX.Element {
   const importing = importBatch.isPending || importNew.isPending
   const dateKey = dateSessionKey()
 
-  function toggle(path: string) {
+  function toggle(path: string, extendRange = false) {
+    const anchor = selectionAnchor.current
     setSelected((prev) => {
       const next = new Set(prev)
-      if (next.has(path)) next.delete(path)
-      else next.add(path)
+      const shouldSelect = !prev.has(path)
+      const anchorIndex = anchor
+        ? visible.findIndex((log) => log.remote_path === anchor)
+        : -1
+      const targetIndex = visible.findIndex((log) => log.remote_path === path)
+
+      if (extendRange && anchorIndex >= 0 && targetIndex >= 0) {
+        const start = Math.min(anchorIndex, targetIndex)
+        const end = Math.max(anchorIndex, targetIndex)
+        for (const log of visible.slice(start, end + 1)) {
+          if (shouldSelect) next.add(log.remote_path)
+          else next.delete(log.remote_path)
+        }
+      } else if (shouldSelect) {
+        next.add(path)
+      } else {
+        next.delete(path)
+      }
       return next
     })
+    selectionAnchor.current = path
   }
   function toggleAll() {
     setSelected(allShownSelected ? new Set() : new Set(visible.map((l) => l.remote_path)))
+    selectionAnchor.current = null
   }
   function openDialog(target: HubLog[], mode: 'existing' | 'new') {
     if (target.length > 0) setDialog({ logs: target, mode })
@@ -121,6 +141,7 @@ export default function HubLogTable(): JSX.Element {
       })
     }
     setSelected(new Set())
+    selectionAnchor.current = null
   }
 
   return (
@@ -197,7 +218,7 @@ export default function HubLogTable(): JSX.Element {
                 }
                 tint={shade === 'tint'}
                 checked={selected.has(log.remote_path)}
-                onToggle={() => toggle(log.remote_path)}
+                onToggle={(extendRange) => toggle(log.remote_path, extendRange)}
                 onImport={() => openDialog([log], 'existing')}
                 onQuickImport={() => quickImport([log])}
                 quickTargetLabel={dateKey}
@@ -222,7 +243,10 @@ export default function HubLogTable(): JSX.Element {
           correctHubTime={correctHubTime}
           hubTime={hubTime}
           initialMode={dialog.mode}
-          onImported={() => setSelected(new Set())}
+          onImported={() => {
+            setSelected(new Set())
+            selectionAnchor.current = null
+          }}
           onClose={() => setDialog(null)}
         />
       )}
@@ -235,7 +259,7 @@ interface RowProps {
   recorded: string | null
   tint: boolean
   checked: boolean
-  onToggle: () => void
+  onToggle: (extendRange: boolean) => void
   onImport: () => void
   onQuickImport: () => void
   quickTargetLabel: string
@@ -258,9 +282,22 @@ function Row({
   const ignored = log.import_status.state === 'ignored'
   const colour = guessAlliance(log.opmode, log.filename)
   return (
-    <tr className={`${ignored ? 'is-ignored' : ''}${tint ? ` tint-${colour}` : ''}`}>
+    <tr
+      className={`${checked ? 'is-selected ' : ''}${ignored ? 'is-ignored' : ''}${tint ? ` tint-${colour}` : ''}`}
+      aria-selected={checked}
+      onClick={(event) => onToggle(event.shiftKey)}
+    >
       <td className={`pick striped ${colour}`}>
-        <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Select ${log.filename}`} />
+        <input
+          type="checkbox"
+          checked={checked}
+          readOnly
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggle(event.shiftKey)
+          }}
+          aria-label={`Select ${log.filename}`}
+        />
       </td>
       <td>
         <span className="opmode-cell">
@@ -278,7 +315,7 @@ function Row({
       <td className="mono filename" title={log.remote_path}>
         {log.filename}
       </td>
-      <td className="row-actions">
+      <td className="row-actions" onClick={(event) => event.stopPropagation()}>
         <button className="link-btn" onClick={onImport}>
           Import
         </button>
