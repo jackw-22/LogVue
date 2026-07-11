@@ -194,6 +194,17 @@ export function useClearHubLogFolder() {
   })
 }
 
+export function useSetFolderTimeOffsetMinutes() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (minutes: number) => api.settings.setFolderTimeOffsetMinutes(minutes),
+    onSuccess: (settings) => {
+      qc.setQueryData(keys.settings, settings)
+      invalidateHubSource(qc)
+    }
+  })
+}
+
 export function useSetAdbAddress() {
   const qc = useQueryClient()
   return useMutation({

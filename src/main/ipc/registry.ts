@@ -89,6 +89,12 @@ const handlers: Handlers = {
     refreshAdbClient()
     return next
   },
+  'settings:setFolderTimeOffsetMinutes': async (minutes) => {
+    if (!Number.isFinite(minutes)) throw new Error('Enter a valid folder time correction')
+    const next = saveSettings({ folderTimeOffsetMinutes: minutes })
+    refreshAdbClient()
+    return next
+  },
   'settings:setConfirmDeletePopulatedSessions': async (confirm) =>
     saveSettings({ confirmDeletePopulatedSessions: confirm }),
 

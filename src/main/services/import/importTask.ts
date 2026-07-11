@@ -11,6 +11,7 @@ import type {
 import type { AdbLike } from '../adb/AdbClient'
 import { readMetadataOrDefault } from '../archive/SessionStore'
 import { startTask, type TaskHandle } from '../tasks/TaskService'
+import { pauseArchiveWatcher } from '../watcher/Watcher'
 import { importBatchToSession, importToNewSession, importToSession, type ImportHooks } from './ImportService'
 
 /**
@@ -77,6 +78,7 @@ export async function runImportTask(
   root: string | null | undefined,
   req: BatchImportRequest
 ): Promise<ImportResult[]> {
+  const resumeWatcher = pauseArchiveWatcher()
   const label = sessionLabel(req.sessionPath)
   const handle = startTask({
     kind: 'import',
@@ -94,6 +96,8 @@ export async function runImportTask(
   } catch (err) {
     handle.fail(err)
     throw err
+  } finally {
+    resumeWatcher()
   }
 }
 
@@ -103,6 +107,7 @@ export async function runSingleImportTask(
   root: string | null | undefined,
   req: ImportRequest
 ): Promise<ImportResult> {
+  const resumeWatcher = pauseArchiveWatcher()
   const label = sessionLabel(req.sessionPath)
   const handle = startTask({
     kind: 'import',
@@ -119,6 +124,8 @@ export async function runSingleImportTask(
   } catch (err) {
     handle.fail(err)
     throw err
+  } finally {
+    resumeWatcher()
   }
 }
 
@@ -128,6 +135,7 @@ export async function runNewSessionImportTask(
   root: string | null | undefined,
   req: NewSessionImportRequest
 ): Promise<NewSessionImportResult> {
+  const resumeWatcher = pauseArchiveWatcher()
   const handle = startTask({
     kind: 'import',
     title: `Importing to ${req.displayName}`,
@@ -143,6 +151,8 @@ export async function runNewSessionImportTask(
   } catch (err) {
     handle.fail(err)
     throw err
+  } finally {
+    resumeWatcher()
   }
 }
 

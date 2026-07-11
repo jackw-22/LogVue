@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionNode } from '../src/shared/types/session'
-import { buildPathLabels, findNode, normalizePathKey, pathsEqual } from '../src/renderer/lib/tree'
+import {
+  buildPathLabels,
+  findNode,
+  normalizePathKey,
+  pathsEqual,
+  subtreeLogCount
+} from '../src/renderer/lib/tree'
 
 function node(path: string, children: SessionNode[] = []): SessionNode {
   return {
@@ -39,5 +45,14 @@ describe('renderer tree path helpers', () => {
     const labels = buildPathLabels(tree)
 
     expect(labels.get('c:/users/jack/logvue/event/q4')?.parentLabel).toBe('Event')
+  })
+
+  it('includes descendant sessions in a tree node log count', () => {
+    const event = node('/library/Event', [node('/library/Event/Q1'), node('/library/Event/Q2')])
+    event.logCount = 1
+    event.children[0].logCount = 2
+    event.children[1].logCount = 3
+
+    expect(subtreeLogCount(event)).toBe(6)
   })
 })

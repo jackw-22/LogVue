@@ -26,6 +26,8 @@ export const api = {
     setHubDataSource: (source: 'adb' | 'folder') =>
       window.api.invoke('settings:setHubDataSource', source),
     setHubLogFolder: (path: string | null) => window.api.invoke('settings:setHubLogFolder', path),
+    setFolderTimeOffsetMinutes: (minutes: number) =>
+      window.api.invoke('settings:setFolderTimeOffsetMinutes', minutes),
     setConfirmDeletePopulatedSessions: (confirm: boolean) =>
       window.api.invoke('settings:setConfirmDeletePopulatedSessions', confirm)
   },

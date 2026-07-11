@@ -226,20 +226,23 @@ describe('FakeAdbClient', () => {
     }
   })
 
-  it('uses no clock offset for the user-selected folder source', async () => {
+  it('uses the manual clock offset for the user-selected folder source', async () => {
     const root = mkdtempSync(join(tmpdir(), 'logvue-fake-adb-'))
     try {
       const client = createAdbClient({
         archiveRoot: null,
         teamNumber: null,
+        adbAddress: '192.168.43.1:5555',
         hubDataSource: 'folder',
-        hubLogFolder: root
+        hubLogFolder: root,
+        folderTimeOffsetMinutes: 90,
+        confirmDeletePopulatedSessions: true
       })
       const sample = await client.getTimeSample()
       const localMidpointMs =
         sample.localBeforeMs + (sample.localAfterMs - sample.localBeforeMs) / 2
 
-      expect(localMidpointMs - sample.hubNowMs).toBe(0)
+      expect(localMidpointMs - sample.hubNowMs).toBe(90 * 60_000)
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

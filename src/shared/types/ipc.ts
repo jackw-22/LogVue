@@ -81,6 +81,7 @@ export interface IpcApi {
   'settings:pickHubLogFolder': () => Promise<string | null>
   'settings:setHubDataSource': (source: AppSettings['hubDataSource']) => Promise<AppSettings>
   'settings:setHubLogFolder': (path: string | null) => Promise<AppSettings>
+  'settings:setFolderTimeOffsetMinutes': (minutes: number) => Promise<AppSettings>
   'settings:setConfirmDeletePopulatedSessions': (confirm: boolean) => Promise<AppSettings>
 
   // ── archive / sessions (disk-backed; source of truth) ──────

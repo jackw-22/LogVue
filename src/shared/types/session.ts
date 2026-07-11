@@ -92,6 +92,7 @@ export interface SessionNode {
   sessionType: SessionType
   hasSessionJson: boolean
   fileCount: number
+  /** Logs directly in this folder; tree views may add descendant counts. */
   logCount: number
   tags: string[]
   sortKey: string | null
@@ -105,6 +106,8 @@ export interface FolderFile {
   filename: string
   kind: FileKind
   sizeBytes: number | null
+  /** Filesystem modification time, used as the last chronological-sort fallback. */
+  modifiedAt: string | null
   /** True when the file is listed in the folder's `session.json` (imported/curated), not just loose on disk. */
   tracked: boolean
   /** RLOG-embedded metadata (Logger.recordMetadata), decoded from the file head; null for non-logs or logs without any. */
@@ -135,6 +138,8 @@ export interface AppSettings {
   adbAddress: string
   hubDataSource: 'adb' | 'folder'
   hubLogFolder: string | null
+  /** Minutes added to timestamps read from the selected folder source. */
+  folderTimeOffsetMinutes: number
   /** Ask before recursively deleting a session that contains files or child folders. */
   confirmDeletePopulatedSessions: boolean
 }

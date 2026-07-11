@@ -22,6 +22,11 @@ export function findNode(nodes: SessionNode[], path: string): SessionNode | null
   return null
 }
 
+/** Number of logs directly in this node and in every descendant session. */
+export function subtreeLogCount(node: SessionNode): number {
+  return node.logCount + node.children.reduce((sum, child) => sum + subtreeLogCount(child), 0)
+}
+
 /** What the dashboard shows next to a session: its display name and its parent's. */
 export interface PathLabels {
   label: string

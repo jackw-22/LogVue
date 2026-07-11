@@ -9,13 +9,14 @@ import {
   useHubLogs,
   useHubTime,
   useIgnoreHubLog,
+  useImportBatchToSession,
   useImportToNewSession,
-  useImportToSession,
   useSettings,
   useUnignoreHubLog
 } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
 import { guessAlliance } from '../lib/alliance'
+import { dateSessionKey } from '../lib/hubLogSelection'
 import {
   correctedHubTimestamp,
   formatHubOffset,
@@ -23,14 +24,6 @@ import {
   formatTimestamp
 } from '../lib/time'
 import ImportDialog from './ImportDialog'
-
-/** Local YYYY-MM-DD, the name of the date-based session quick import targets. */
-function todayKey(): string {
-  const d = new Date()
-  const mo = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${mo}-${day}`
-}
 
 /** Control Hub view: the remote `.rlog` files, with selection + import/ignore actions (spec §10). */
 export default function HubLogTable(): JSX.Element {
@@ -50,7 +43,7 @@ export default function HubLogTable(): JSX.Element {
 
   const ignore = useIgnoreHubLog()
   const unignore = useUnignoreHubLog()
-  const importOne = useImportToSession()
+  const importBatch = useImportBatchToSession()
   const importNew = useImportToNewSession()
   const shade = useAppStore((s) => s.shade)
 
@@ -85,7 +78,8 @@ export default function HubLogTable(): JSX.Element {
 
   const selectedLogs = visible.filter((l) => selected.has(l.remote_path))
   const allShownSelected = visible.length > 0 && visible.every((l) => selected.has(l.remote_path))
-  const importing = importOne.isPending || importNew.isPending
+  const importing = importBatch.isPending || importNew.isPending
+  const dateKey = dateSessionKey()
 
   function toggle(path: string) {
     setSelected((prev) => {
@@ -102,15 +96,11 @@ export default function HubLogTable(): JSX.Element {
     if (target.length > 0) setDialog({ logs: target, mode })
   }
 
-  /**
-   * Quick import (prototype §hub): drop logs straight into today's date-based
-   * session at the archive root, creating it on first use, no dialog.
-   */
+  /** Import without a dialog into today's root-level date session. */
   async function quickImport(target: HubLog[]) {
     if (target.length === 0 || !settings?.archiveRoot || importing) return
-    const key = todayKey()
-    const existing = (tree ?? []).find(
-      (n: SessionNode) => n.displayName === key || n.name === key
+    const existingDateSession = (tree ?? []).find(
+      (node: SessionNode) => node.displayName === dateKey || node.name === dateKey
     )
     const refs = target.map((l) => ({
       remotePath: l.remote_path,
@@ -120,14 +110,12 @@ export default function HubLogTable(): JSX.Element {
         ? correctedHubTimestamp(l.parsed_timestamp, hubTime?.hubTimezoneOffsetMinutes ?? null, hubTime?.offsetMs ?? 0)
         : null
     }))
-    if (existing) {
-      for (const ref of refs) {
-        await importOne.mutateAsync({ ...ref, sessionPath: existing.path, force: false })
-      }
+    if (existingDateSession) {
+      await importBatch.mutateAsync({ sessionPath: existingDateSession.path, logs: refs, force: false })
     } else {
       await importNew.mutateAsync({
         parentPath: settings.archiveRoot,
-        displayName: key,
+        displayName: dateKey,
         sessionType: 'general_session',
         logs: refs
       })
@@ -148,14 +136,6 @@ export default function HubLogTable(): JSX.Element {
             onClick={() => openDialog(selectedLogs, 'existing')}
           >
             Import selected…
-          </button>
-          <button
-            className="quick-btn sm"
-            disabled={selectedLogs.length === 0 || importing}
-            onClick={() => quickImport(selectedLogs)}
-            title="Import straight into today's date-based session"
-          >
-            {importing ? 'Importing…' : `Quick import → ${todayKey()}`}
           </button>
           <button
             className="ghost sm"
@@ -220,6 +200,7 @@ export default function HubLogTable(): JSX.Element {
                 onToggle={() => toggle(log.remote_path)}
                 onImport={() => openDialog([log], 'existing')}
                 onQuickImport={() => quickImport([log])}
+                quickTargetLabel={dateKey}
                 onIgnore={() =>
                   ignore.mutate({
                     remotePath: log.remote_path,
@@ -257,6 +238,7 @@ interface RowProps {
   onToggle: () => void
   onImport: () => void
   onQuickImport: () => void
+  quickTargetLabel: string
   onIgnore: () => void
   onUnignore: () => void
 }
@@ -269,6 +251,7 @@ function Row({
   onToggle,
   onImport,
   onQuickImport,
+  quickTargetLabel,
   onIgnore,
   onUnignore
 }: RowProps): JSX.Element {
@@ -302,7 +285,7 @@ function Row({
         <button
           className="link-btn quick"
           onClick={onQuickImport}
-          title="Import straight into today's date-based session"
+          title={`Import straight into ${quickTargetLabel}`}
         >
           Quick import
         </button>

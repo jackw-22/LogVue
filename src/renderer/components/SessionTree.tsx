@@ -5,10 +5,11 @@ import { formatBytes } from '@shared/format/bytes'
 import { useArchiveTree, useLibrarySize } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
 import { allianceClass } from '../lib/alliance'
-import { normalizePathKey, pathsEqual } from '../lib/tree'
+import { normalizePathKey, pathsEqual, subtreeLogCount } from '../lib/tree'
+import { sessionTypeIcon } from '../lib/sessionPresentation'
 
 function totalLogCount(nodes: SessionNode[]): number {
-  return nodes.reduce((sum, node) => sum + node.logCount + totalLogCount(node.children), 0)
+  return nodes.reduce((sum, node) => sum + subtreeLogCount(node), 0)
 }
 
 function containsPath(node: SessionNode, path: string | null): boolean {
@@ -60,6 +61,9 @@ function TreeRow({
   const tint = shade === 'tint' && !isFolder ? ` tint-${colour}` : ''
   const hasChildren = node.children.length > 0
   const isCollapsed = collapsed.has(normalizePathKey(node.path)) && !containsPath(node, selectedPath)
+  const typeIcon = node.hasSessionJson ? sessionTypeIcon(node.sessionType) : null
+  const totalLogs = subtreeLogCount(node)
+  const showRootLeafDot = depth === 0 && node.hasSessionJson && !hasChildren
 
   return (
     <>
@@ -70,27 +74,40 @@ function TreeRow({
         title={node.path}
       >
         <span className="tree-indent" aria-hidden="true" />
-        <button
-          type="button"
-          className={`tree-toggle${!hasChildren ? ' empty' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation()
-            if (hasChildren) toggle(node)
-          }}
-          aria-label={hasChildren ? `${isCollapsed ? 'Expand' : 'Collapse'} ${node.displayName}` : undefined}
-          tabIndex={hasChildren ? 0 : -1}
-        >
-          {hasChildren ? (isCollapsed ? '▸' : '▾') : ''}
-        </button>
+        {hasChildren ? (
+          <button
+            type="button"
+            className="tree-toggle"
+            onClick={(e) => {
+              e.stopPropagation()
+              toggle(node)
+            }}
+            aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${node.displayName}`}
+          >
+            {isCollapsed ? '▸' : '▾'}
+          </button>
+        ) : (
+          <span
+            className={`tree-toggle empty${showRootLeafDot ? ' leaf-dot' : ''}`}
+            aria-hidden="true"
+          >
+            {showRootLeafDot ? '•' : ''}
+          </span>
+        )}
         <span className={`stripe ${isFolder ? 'none' : colour}`} />
+        {typeIcon && (
+          <span className="session-type-icon" aria-hidden="true">
+            {typeIcon}
+          </span>
+        )}
         <span className={`tree-name${isFolder ? ' folder' : ''}`}>{node.displayName}</span>
-        {(node.hasSessionJson || node.logCount > 0) && (
+        {(node.hasSessionJson || totalLogs > 0) && (
           <span
             className={`chip count${isFolder ? ' bare' : ''}`}
             title={isFolder ? 'Folder is not recognised as a session' : undefined}
           >
             {isFolder && <span className="chip-warning">⚠️</span>}
-            {formatLogCount(node.logCount)}
+            {formatLogCount(totalLogs)}
           </span>
         )}
       </div>

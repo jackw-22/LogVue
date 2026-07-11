@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import type { HubLog } from '@shared/types/hublog'
 import type { MatchInfo } from '@shared/types/session'
 import { formatBytes } from '@shared/format/bytes'
@@ -14,13 +14,14 @@ import {
 interface Props {
   sessionPath: string
   match: MatchInfo | undefined
+  initiallyCollapsed: boolean
 }
 
 function toRef(log: HubLog, recordedAt: string | null) {
   return { remotePath: log.remote_path, filename: log.filename, fileSize: log.file_size_bytes, recordedAt }
 }
 
-export default function SuggestedLogs({ sessionPath, match }: Props): JSX.Element | null {
+export default function SuggestedLogs({ sessionPath, match, initiallyCollapsed }: Props): JSX.Element | null {
   const { data: settings } = useSettings()
   const { data: adb } = useAdbStatus()
   const sourceIsFolder = settings?.hubDataSource === 'folder'
@@ -29,8 +30,10 @@ export default function SuggestedLogs({ sessionPath, match }: Props): JSX.Elemen
   const { data: logs, isLoading: logsLoading } = useHubLogs(connected)
   const { data: hubTime, isLoading: timeLoading, isError: timeError } = useHubTime(connected)
   const importOne = useImportToSession()
+  const [collapsed, setCollapsed] = useState(initiallyCollapsed)
   const [correctHubTime, setCorrectHubTime] = useState(true)
   const [checked, setChecked] = useState<Set<string>>(new Set())
+  const contentId = useId()
   const choice = matchTimeChoice(match)
 
   const activeOffsetMs = correctHubTime ? hubTime?.offsetMs ?? 0 : 0
@@ -60,6 +63,13 @@ export default function SuggestedLogs({ sessionPath, match }: Props): JSX.Elemen
       )
     )
   }, [suggestions])
+
+  // SuggestedLogs can remain mounted while navigating between cached sessions.
+  // Give each session its own appropriate default without overriding a choice the
+  // user makes while imports update the current session.
+  useEffect(() => {
+    setCollapsed(initiallyCollapsed)
+  }, [sessionPath])
 
   async function importLog(log: HubLog): Promise<void> {
     const recordedAt = correctHubTime
@@ -92,15 +102,27 @@ export default function SuggestedLogs({ sessionPath, match }: Props): JSX.Elemen
 
   return (
     <section className="suggested-logs">
-      <div className="suggested-head">
-        <div>
-          <h3>Suggested logs</h3>
-          <p className="muted small">
-            {choice.source === 'actual' ? 'Actual' : 'Scheduled'} match time:{' '}
-            <span className="mono">{formatTimestamp(choice.value)}</span>
-          </p>
+      <div className={`suggested-head${collapsed ? ' collapsed' : ''}`}>
+        <div className="suggested-heading">
+          <button
+            type="button"
+            className="suggested-toggle"
+            aria-expanded={!collapsed}
+            aria-controls={contentId}
+            aria-label={collapsed ? 'Expand suggested logs' : 'Collapse suggested logs'}
+            onClick={() => setCollapsed((value) => !value)}
+          >
+            <span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
+          </button>
+          <div>
+            <h3>Suggested logs</h3>
+            <p className="muted small">
+              {choice.source === 'actual' ? 'Actual' : 'Scheduled'} match time:{' '}
+              <span className="mono">{formatTimestamp(choice.value)}</span>
+            </p>
+          </div>
         </div>
-        <div className="suggested-actions">
+        {!collapsed && <div className="suggested-actions">
           <label className="show-ignored small" title={hubTime ? `Source round trip ${hubTime.roundTripMs}ms` : undefined}>
             <input
               type="checkbox"
@@ -120,34 +142,35 @@ export default function SuggestedLogs({ sessionPath, match }: Props): JSX.Elemen
           >
             {busy ? 'Importing…' : connected ? `Import ${checkedSuggestions.length || ''}`.trim() : 'Import'}
           </button>
-        </div>
+        </div>}
       </div>
 
-      {importOne.isError && (
-        <p className="small error-text" role="status">
-          {importOne.error instanceof Error ? importOne.error.message : 'Import failed'}
-        </p>
-      )}
+      <div id={contentId} hidden={collapsed}>
+        {importOne.isError && (
+          <p className="small error-text" role="status">
+            {importOne.error instanceof Error ? importOne.error.message : 'Import failed'}
+          </p>
+        )}
 
-      {!connected ? (
-        <p className="muted small">
-          {logs?.length
-            ? `${sourceName} unavailable — restore it to import these logs.`
-            : `Open ${sourceName} to suggest logs for this match.`}
-        </p>
-      ) : logsLoading ? (
-        <p className="muted small">Reading {sourceName} logs…</p>
-      ) : suggestions.length === 0 ? (
-        <p className="muted small">No unimported hub logs found near this match time.</p>
-      ) : (
-        <div className="suggested-list">
-          {pendingCount === 0 && (
-            <p className="muted small">Every hub log near this match time has been imported.</p>
-          )}
-          {suggestions.map(({ log, correctedTimeMs, deltaMs, strength, imported }) => {
-            const status = log.import_status
-            return (
-              <div key={log.remote_path} className={`suggested-log ${strength}`}>
+        {!connected ? (
+          <p className="muted small">
+            {logs?.length
+              ? `${sourceName} unavailable — restore it to import these logs.`
+              : `Open ${sourceName} to suggest logs for this match.`}
+          </p>
+        ) : logsLoading ? (
+          <p className="muted small">Reading {sourceName} logs…</p>
+        ) : suggestions.length === 0 ? (
+          <p className="muted small">No unimported hub logs found near this match time.</p>
+        ) : (
+          <div className="suggested-list">
+            {pendingCount === 0 && (
+              <p className="muted small">Every hub log near this match time has been imported.</p>
+            )}
+            {suggestions.map(({ log, correctedTimeMs, deltaMs, strength, imported }) => {
+              const status = log.import_status
+              return (
+                <div key={log.remote_path} className={`suggested-log ${strength}`}>
                 <div className="suggested-log-main">
                   <input
                     type="checkbox"
@@ -187,11 +210,12 @@ export default function SuggestedLogs({ sessionPath, match }: Props): JSX.Elemen
                     </button>
                   )}
                 </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </section>
   )
 }

@@ -4,24 +4,21 @@ import { formatBytes } from '@shared/format/bytes'
 import type { Task, TaskItem } from '@shared/types/tasks'
 import { api } from '../api/client'
 import { useAppStore } from '../stores/appStore'
-import { aggregateFraction, autoDismissAt, taskFraction, useTaskStore } from '../stores/taskStore'
+import { AUTO_DISMISS_MS, autoDismissAt, taskFraction, useTaskStore } from '../stores/taskStore'
 
 /**
  * The activity toast stack: one card per background operation, bottom-right, each
- * appearing and clearing on its own. Collapses to a pill with an aggregate ring.
+ * appearing and clearing on its own.
  *
  * Cards are pure functions of the {@link Task} snapshots main pushes — this component
- * owns no progress state, only what's local to the UI (collapse, which file lists are
- * open, and the auto-dismiss countdown).
+ * owns no progress state, only which file lists are open and the auto-dismiss countdown.
  */
 export default function ActivityToasts(): JSX.Element | null {
   const tasks = useTaskStore((s) => s.tasks)
-  const collapsed = useTaskStore((s) => s.collapsed)
   const expanded = useTaskStore((s) => s.expanded)
   const hydrate = useTaskStore((s) => s.hydrate)
   const upsert = useTaskStore((s) => s.upsert)
   const dismiss = useTaskStore((s) => s.dismiss)
-  const toggleCollapsed = useTaskStore((s) => s.toggleCollapsed)
 
   // Replay whatever is already in flight (a reload mid-import), then follow the stream.
   useEffect(() => {
@@ -34,56 +31,12 @@ export default function ActivityToasts(): JSX.Element | null {
 
   if (tasks.length === 0) return null
 
-  if (collapsed) {
-    return <CollapsedPill tasks={tasks} onExpand={toggleCollapsed} />
-  }
-
   return (
     <div className="toasts" role="status" aria-live="polite">
-      <div className="toasts-head">
-        <span className="toasts-title">Activity</span>
-        <button className="toasts-collapse" onClick={toggleCollapsed}>
-          Collapse ▾
-        </button>
-      </div>
       {tasks.map((task) => (
         <TaskCard key={task.id} task={task} />
       ))}
     </div>
-  )
-}
-
-function CollapsedPill({ tasks, onExpand }: { tasks: Task[]; onExpand: () => void }): JSX.Element {
-  const running = tasks.filter((t) => t.status === 'running')
-  const failed = tasks.some((t) => t.status === 'error' || t.items.some((i) => i.status === 'failed'))
-  const pct = Math.round(aggregateFraction(tasks) * 100)
-
-  const ringColor = running.length > 0 ? 'var(--accent)' : failed ? 'var(--red)' : 'var(--good)'
-  const text =
-    running.length === 1
-      ? running[0].title
-      : running.length > 1
-        ? `${running.length} tasks running`
-        : failed
-          ? 'Finished with errors'
-          : 'All done'
-  const sub =
-    running.length > 0 ? `${running.length} task${running.length > 1 ? 's' : ''} · ${pct}%` : ''
-
-  return (
-    <button className="toast-pill" onClick={onExpand}>
-      <span
-        className="ring ring-sm"
-        style={{
-          background: `conic-gradient(${ringColor} 0 ${pct}%, var(--border) ${pct}% 100%)`
-        }}
-      >
-        <span className="ring-hole" />
-      </span>
-      <span className="toast-pill-text">{text}</span>
-      {sub && <span className="toast-pill-sub">{sub}</span>}
-      <span className="toast-pill-caret">▴</span>
-    </button>
   )
 }
 
@@ -94,7 +47,6 @@ function TaskCard({ task }: { task: Task }): JSX.Element {
   const openSession = useAppStore((s) => s.openSession)
 
   const running = task.status === 'running'
-  const failedCount = task.items.filter((i) => i.status === 'failed').length
   const hasItems = task.items.length > 0
 
   return (
@@ -138,10 +90,8 @@ function TaskCard({ task }: { task: Task }): JSX.Element {
             {expanded ? '▾' : '▸'}
           </button>
         )}
-        {!running && !hasItems && (
-          <button className="toast-caret" onClick={() => dismiss(task.id)} aria-label="Dismiss">
-            ✕
-          </button>
+        {!running && (
+          <TaskCloseButton task={task} expanded={expanded} onDismiss={() => dismiss(task.id)} />
         )}
       </div>
 
@@ -163,9 +113,7 @@ function TaskCard({ task }: { task: Task }): JSX.Element {
       {!running && (
         <TaskFooter
           task={task}
-          failedCount={failedCount}
           onOpen={task.targetPath ? () => openSession(task.targetPath as string) : null}
-          onDismiss={() => dismiss(task.id)}
         />
       )}
     </div>
@@ -249,52 +197,69 @@ function FileRow({ item }: { item: TaskItem }): JSX.Element {
 
 function TaskFooter({
   task,
-  failedCount,
-  onOpen,
-  onDismiss
+  onOpen
 }: {
   task: Task
-  failedCount: number
   onOpen: (() => void) | null
-  onDismiss: () => void
 }): JSX.Element | null {
-  const expanded = useTaskStore((s) => s.expanded[task.id] ?? false)
-  const countdown = useCountdown(task, expanded)
-
-  if (!onOpen && countdown === null && failedCount === 0) return null
+  if (!onOpen) return null
 
   return (
     <div className="toast-footer">
-      {onOpen && (
-        <button className="toast-link" onClick={onOpen}>
-          {task.kind === 'ftcscout' ? 'View event →' : 'View session →'}
-        </button>
-      )}
-      <span className="toast-spacer" />
-      {countdown !== null ? (
-        <span className="toast-dismiss-note">Auto-dismiss in {countdown}s</span>
-      ) : (
-        <button className="toast-link muted" onClick={onDismiss}>
-          Dismiss
-        </button>
-      )}
+      <button className="toast-link" onClick={onOpen}>
+        {task.kind === 'ftcscout' ? 'View event →' : 'View session →'}
+      </button>
     </div>
   )
 }
 
-/** Seconds until this card clears itself, or null when it's staying put. */
-function useCountdown(task: Task, expanded: boolean): number | null {
+function TaskCloseButton({
+  task,
+  expanded,
+  onDismiss
+}: {
+  task: Task
+  expanded: boolean
+  onDismiss: () => void
+}): JSX.Element {
+  const progress = useAutoDismissProgress(task, expanded)
+  const circumference = 44
+
+  return (
+    <button className="toast-close" onClick={onDismiss} aria-label="Dismiss">
+      {progress !== null && (
+        <svg className="toast-close-ring" viewBox="0 0 18 18" aria-hidden="true">
+          <circle className="toast-close-track" cx="9" cy="9" r="7" />
+          <circle
+            className="toast-close-progress"
+            cx="9"
+            cy="9"
+            r="7"
+            pathLength={circumference}
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - progress)}
+          />
+        </svg>
+      )}
+      <span aria-hidden="true">✕</span>
+    </button>
+  )
+}
+
+/** Remaining auto-dismiss progress, from 1 to 0, or null when it is paused/disabled. */
+function useAutoDismissProgress(task: Task, expanded: boolean): number | null {
   const at = autoDismissAt(task)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
     if (at === null || expanded) return
-    const id = setInterval(() => setNow(Date.now()), 250)
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 100)
     return () => clearInterval(id)
   }, [at, expanded])
 
   if (at === null || expanded) return null
-  return Math.max(0, Math.ceil((at - now) / 1000))
+  return Math.min(1, Math.max(0, (at - now) / AUTO_DISMISS_MS))
 }
 
 /**

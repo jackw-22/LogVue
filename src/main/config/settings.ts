@@ -10,6 +10,7 @@ const DEFAULTS: AppSettings = {
   adbAddress: DEFAULT_ADB_ADDRESS,
   hubDataSource: 'adb',
   hubLogFolder: null,
+  folderTimeOffsetMinutes: 0,
   confirmDeletePopulatedSessions: true
 }
 

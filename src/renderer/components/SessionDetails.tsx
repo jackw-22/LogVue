@@ -5,6 +5,7 @@ import {
   toSelectableSessionType
 } from '@shared/constants/sessionTypes'
 import { isMatchType } from '@shared/constants/matchTypes'
+import { LOG_KINDS } from '@shared/constants/fileKinds'
 import type { DeleteSessionSummary, SessionType } from '@shared/types/session'
 import { formatBytes } from '@shared/format/bytes'
 import {
@@ -32,9 +33,16 @@ import FolderDetails from './FolderDetails'
 import FtcScoutSyncPanel from './FtcScoutSyncPanel'
 import SuggestedLogs from './SuggestedLogs'
 import DeleteSessionDialog from './DeleteSessionDialog'
+import RichNotesEditor from './RichNotesEditor'
+import type { RichNotesEditorHandle } from './RichNotesEditor'
+import { pathsEqual } from '../lib/tree'
+import { sessionTypeIcon } from '../lib/sessionPresentation'
+import { sortSessionFiles, type SessionFileSort } from '../lib/sessionFiles'
 
 /** Quiet period after the last keystroke before notes are written to disk. */
 const AUTOSAVE_DELAY_MS = 700
+/** How long a search/mention-click target remains visibly haloed. */
+const LOG_HALO_DURATION_MS = 4000
 
 interface Props {
   path: string
@@ -56,6 +64,29 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Could not delete the session.'
 }
 
+/** A compositor-friendly confirmation pulse: only opacity and transform animate. */
+function pulseFileRow(row: HTMLLIElement, durationMs: number): void {
+  const existing = row.querySelector<HTMLElement>('.file-pulse-overlay')
+  existing?.getAnimations().forEach((animation) => animation.cancel())
+  existing?.remove()
+
+  const overlay = document.createElement('span')
+  overlay.className = 'file-pulse-overlay'
+  overlay.setAttribute('aria-hidden', 'true')
+  row.append(overlay)
+
+  const animation = overlay.animate(
+    [
+      { opacity: 0.3, transform: 'scale(0.992)' },
+      { opacity: 0, transform: 'scale(1.018)' }
+    ],
+    { duration: durationMs, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
+  )
+  const remove = () => overlay.remove()
+  animation.addEventListener('finish', remove, { once: true })
+  animation.addEventListener('cancel', remove, { once: true })
+}
+
 export default function SessionDetails({ path, onNewChild }: Props): JSX.Element {
   const { data: session, isLoading } = useSession(path)
   const { data: settings } = useSettings()
@@ -74,6 +105,10 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
   const setView = useAppStore((s) => s.setView)
   const showFileMeta = useAppStore((s) => s.showFileMeta)
   const setShowFileMeta = useAppStore((s) => s.setShowFileMeta)
+  const sessionFileSort = useAppStore((s) => s.sessionFileSort)
+  const setSessionFileSort = useAppStore((s) => s.setSessionFileSort)
+  const focusedLog = useAppStore((s) => s.focusedLog)
+  const focusLog = useAppStore((s) => s.focusLog)
   const sourceName = settings?.hubDataSource === 'folder' ? 'Folder Import' : 'Control Hub'
 
   const [name, setName] = useState('')
@@ -82,6 +117,9 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
   const [fileMenu, setFileMenu] = useState<FileMenuState | null>(null)
   const [deletePrompt, setDeletePrompt] = useState<DeleteSessionSummary | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [haloedLog, setHaloedLog] = useState<typeof focusedLog>(focusedLog)
+  const fileRows = useRef(new Map<string, HTMLLIElement>())
+  const notesEditor = useRef<RichNotesEditorHandle>(null)
 
   // Reset local edit state whenever the loaded session changes.
   useEffect(() => {
@@ -138,12 +176,35 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
     }
   }, [fileMenu])
 
+  useEffect(() => {
+    if (!focusedLog || !pathsEqual(focusedLog.sessionPath, path)) {
+      setHaloedLog(null)
+      return
+    }
+    setHaloedLog(focusedLog)
+    const requestId = focusedLog.requestId
+    const timer = window.setTimeout(() => {
+      setHaloedLog((current) => current?.requestId === requestId ? null : current)
+    }, LOG_HALO_DURATION_MS)
+    return () => window.clearTimeout(timer)
+  }, [focusedLog?.requestId, focusedLog?.filename, focusedLog?.sessionPath, path])
+
+  // The file list can arrive after the session shell, so perform the scroll/pulse
+  // separately without restarting the four-second halo timeout on file refetches.
+  useEffect(() => {
+    if (!focusedLog || !pathsEqual(focusedLog.sessionPath, path)) return
+    const row = fileRows.current.get(focusedLog.filename)
+    if (!row) return
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    pulseFileRow(row, 800)
+  }, [focusedLog?.requestId, focusedLog?.filename, focusedLog?.sessionPath, path, folderFiles])
+
   if (isLoading || !session) return <div className="details-empty">Loading…</div>
 
   const m = session.metadata
   const parsedTags = tags.split(',').map((t) => t.trim()).filter(Boolean)
   const importedByName = new Map(m.files.map((f) => [f.filename, f]))
-  const files = folderFiles ?? []
+  const files = sortSessionFiles(folderFiles ?? [], m.files, sessionFileSort)
   const deleteBusy =
     inspectDelete.isPending || deleteSession.isPending || setDeleteConfirmation.isPending
 
@@ -191,6 +252,12 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
     }
   }
 
+  function pulseMentionedLog(filename: string): void {
+    const row = fileRows.current.get(filename)
+    if (!row) return
+    pulseFileRow(row, 1200)
+  }
+
   // The mutation is shared across sessions, so only report its result for this one.
   const lastSaveWasThisSession = saveNotes.variables?.path === path
   const notesStatus =
@@ -216,6 +283,7 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
   }
 
   const colour = allianceClass(m.match?.alliance ?? null)
+  const typeIcon = sessionTypeIcon(m.session_type)
 
   return (
     <div className="details">
@@ -225,6 +293,11 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
         </button>
         <div className="details-title">
           <span className={`dot lg ${colour}`} />
+          {typeIcon && (
+            <span className="details-session-icon" aria-hidden="true">
+              {typeIcon}
+            </span>
+          )}
           <input
             className="title-input"
             value={name}
@@ -274,7 +347,13 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
       </div>
 
       {isMatchType(m.session_type) && <MatchInfoEditor path={path} match={m.match} />}
-      {isMatchType(m.session_type) && <SuggestedLogs sessionPath={path} match={m.match} />}
+      {isMatchType(m.session_type) && (
+        <SuggestedLogs
+          sessionPath={path}
+          match={m.match}
+          initiallyCollapsed={m.files.some((file) => LOG_KINDS.has(file.kind))}
+        />
+      )}
 
       {m.session_type === 'competition_event' && (
         <>
@@ -288,14 +367,26 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
           <h3>
             Files <span className="muted small">({files.length})</span>
           </h3>
-          <label className="small muted meta-toggle">
-            <input
-              type="checkbox"
-              checked={showFileMeta}
-              onChange={(e) => setShowFileMeta(e.target.checked)}
-            />
-            Show metadata
-          </label>
+          <div className="files-controls">
+            <label className="small muted meta-toggle">
+              <input
+                type="checkbox"
+                checked={showFileMeta}
+                onChange={(e) => setShowFileMeta(e.target.checked)}
+              />
+              Show metadata
+            </label>
+            <select
+              className="file-sort-select"
+              value={sessionFileSort}
+              onChange={(event) => setSessionFileSort(event.target.value as SessionFileSort)}
+              aria-label="Sort session files"
+              title="Sort files"
+            >
+              <option value="alphabetical">Alphabetical</option>
+              <option value="oldest">Oldest → newest</option>
+            </select>
+          </div>
         </div>
         {files.length === 0 ? (
           <div className="empty-files">
@@ -311,6 +402,24 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
               return (
                 <li
                   key={f.filename}
+                  ref={(element) => {
+                    if (element) fileRows.current.set(f.filename, element)
+                    else fileRows.current.delete(f.filename)
+                  }}
+                  className={
+                    haloedLog &&
+                    pathsEqual(haloedLog.sessionPath, path) &&
+                    haloedLog.filename === f.filename
+                      ? 'focused-log'
+                      : undefined
+                  }
+                  aria-current={
+                    focusedLog &&
+                    pathsEqual(focusedLog.sessionPath, path) &&
+                    focusedLog.filename === f.filename
+                      ? 'true'
+                      : undefined
+                  }
                   onContextMenu={(e) => {
                     e.preventDefault()
                     setFileMenu({
@@ -326,6 +435,18 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
                   <span className="mono small muted">
                     {f.tracked ? formatTimestamp(imported?.recorded_at ?? imported?.imported_at) : 'Loose file'}
                   </span>
+                  {f.filename.toLocaleLowerCase().endsWith('.rlog') && (
+                    <button
+                      type="button"
+                      className="ghost sm mention-log-button"
+                      onClick={() => notesEditor.current?.appendMention(f)}
+                      disabled={notes === undefined}
+                      title="Mention this log in Notes"
+                      aria-label={`Mention ${f.filename} in Notes`}
+                    >
+                      @
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="ghost sm"
@@ -343,19 +464,25 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
 
       <section>
         <div className="notes-head">
-          <h3>Notes</h3>
+          <div>
+            <h3>Notes</h3>
+            <span className="muted small">Type @ to link a log</span>
+          </div>
           <span className={`small notes-status ${saveNotes.isError ? 'error' : 'muted'}`} role="status">
             {notesStatus}
           </span>
         </div>
-        <textarea
-          className="notes"
+        <RichNotesEditor
+          ref={notesEditor}
+          key={path}
           value={draftNotes}
-          onChange={(e) => {
-            setDraftNotes(e.target.value)
+          files={files}
+          onChange={(value) => {
+            setDraftNotes(value)
             setDirty(true)
           }}
-          placeholder="Add notes about this session…"
+          onMentionClick={(filename) => focusLog(path, filename)}
+          onMentionCreate={pulseMentionedLog}
         />
       </section>
 

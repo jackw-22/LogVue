@@ -1,45 +1,48 @@
-import type { AllianceFilter, ShadeMode, TypeFilter } from '../stores/appStore'
+import { useState } from 'react'
 import { useAppStore } from '../stores/appStore'
-import { useArchiveTree, useLogQuery } from '../api/hooks'
+import type { SessionNode } from '@shared/types/session'
+import {
+  useAdbStatus,
+  useArchiveTree,
+  useHubLogs,
+  useHubTime,
+  useImportBatchToSession,
+  useImportToNewSession,
+  useLogQuery,
+  useSession,
+  useSettings
+} from '../api/hooks'
 import { allianceClass } from '../lib/alliance'
-import { formatRelative } from '../lib/time'
+import {
+  dateSessionKey,
+  latestSessionLogTime,
+  logsForQuickCatchUp,
+  sessionLogIsFromEarlierDay
+} from '../lib/hubLogSelection'
+import { correctedHubTimestamp, formatRelative, formatTimestamp } from '../lib/time'
 import { findNode } from '../lib/tree'
-
-const ALLIANCE_CHIPS: { value: AllianceFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'red', label: 'Red' },
-  { value: 'blue', label: 'Blue' },
-  { value: 'none', label: 'None' }
-]
-
-const TYPE_CHIPS: { value: TypeFilter; label: string }[] = [
-  { value: 'all', label: 'All types' },
-  { value: 'match', label: 'Match' },
-  { value: 'practice', label: 'Practice' },
-  { value: 'general', label: 'General' }
-]
-
-const SHADE_CHIPS: { value: ShadeMode; label: string }[] = [
-  { value: 'stripe', label: 'Stripe' },
-  { value: 'tint', label: 'Full tint' }
-]
+import StaleSessionImportDialog from './StaleSessionImportDialog'
 
 /**
- * The quick-find bar above the archive view: alliance/type filter chips, the
- * stripe-vs-tint colour toggle, free-text search, and a "Latest" jump button
- * (always the true newest log, ignoring the active filters).
+ * The quick-find bar above the archive view: free-text search and a "Latest"
+ * jump button.
  */
 export default function QuickFindBar(): JSX.Element {
   const search = useAppStore((s) => s.search)
   const setSearch = useAppStore((s) => s.setSearch)
-  const alliance = useAppStore((s) => s.alliance)
-  const setAlliance = useAppStore((s) => s.setAlliance)
-  const typeFilter = useAppStore((s) => s.typeFilter)
-  const setTypeFilter = useAppStore((s) => s.setTypeFilter)
-  const shade = useAppStore((s) => s.shade)
-  const setShade = useAppStore((s) => s.setShade)
   const select = useAppStore((s) => s.select)
-  const openSession = useAppStore((s) => s.openSession)
+  const focusLog = useAppStore((s) => s.focusLog)
+  const selectedPath = useAppStore((s) => s.selectedPath)
+  const [showStaleWarning, setShowStaleWarning] = useState(false)
+  const { data: settings } = useSettings()
+  const { data: adb } = useAdbStatus()
+  const sourceIsFolder = settings?.hubDataSource === 'folder'
+  const sourceConnected = sourceIsFolder ? !!settings?.hubLogFolder : !!adb?.connected
+  const sourceName = sourceIsFolder ? 'Folder Import' : 'Control Hub'
+  const { data: hubLogs, isLoading: hubLogsLoading } = useHubLogs(sourceConnected)
+  const { data: hubTime } = useHubTime(sourceConnected)
+  const importBatch = useImportBatchToSession()
+  const importNew = useImportToNewSession()
 
   function activateSearch(): void {
     // Search results live in the Library dashboard. Selecting the root here makes
@@ -50,57 +53,69 @@ export default function QuickFindBar(): JSX.Element {
   // Unfiltered query — the latest log across the whole archive.
   const { data: allLogs } = useLogQuery({})
   const { data: tree } = useArchiveTree(true)
+  const selectedNode = selectedPath && tree ? findNode(tree, selectedPath) : null
+  const activeSessionNode = selectedNode?.hasSessionJson ? selectedNode : null
+  const { data: activeSession, isLoading: activeSessionLoading } = useSession(
+    activeSessionNode?.path ?? null
+  )
   const latest = allLogs?.[0]
   const latestPath = latest ? (tree ? findNode(tree, latest.sessionPath)?.path ?? latest.sessionPath : latest.sessionPath) : null
+  const dateKey = dateSessionKey()
+  const catchUpLogs = logsForQuickCatchUp(hubLogs ?? [])
+  const importing = importBatch.isPending || importNew.isPending
+  const quickTargetLabel = activeSessionNode?.displayName ?? dateKey
+  const activeFiles = activeSession?.metadata.files ?? []
+  const activeSessionIsStale = !!activeSessionNode && sessionLogIsFromEarlierDay(activeFiles)
+  const latestActiveLogTime = latestSessionLogTime(activeFiles)
+
+  async function importCatchUp(target: 'active' | 'date'): Promise<void> {
+    if (!settings?.archiveRoot || !tree || catchUpLogs.length === 0 || importing) return
+    const existingDateSession = tree.find(
+      (node: SessionNode) => node.displayName === dateKey || node.name === dateKey
+    )
+    const refs = catchUpLogs.map((log) => ({
+      remotePath: log.remote_path,
+      filename: log.filename,
+      fileSize: log.file_size_bytes,
+      recordedAt: correctedHubTimestamp(
+        log.parsed_timestamp,
+        hubTime?.hubTimezoneOffsetMinutes ?? null,
+        hubTime?.offsetMs ?? 0
+      )
+    }))
+    if (target === 'active' && activeSessionNode) {
+      await importBatch.mutateAsync({
+        sessionPath: activeSessionNode.path,
+        logs: refs,
+        force: false
+      })
+    } else if (existingDateSession) {
+      await importBatch.mutateAsync({
+        sessionPath: existingDateSession.path,
+        logs: refs,
+        force: false
+      })
+    } else {
+      await importNew.mutateAsync({
+        parentPath: settings.archiveRoot,
+        displayName: dateKey,
+        sessionType: 'general_session',
+        logs: refs
+      })
+    }
+    setShowStaleWarning(false)
+  }
+
+  function requestCatchUpImport(): void {
+    if (activeSessionIsStale) {
+      setShowStaleWarning(true)
+      return
+    }
+    void importCatchUp(activeSessionNode ? 'active' : 'date').catch(() => {})
+  }
 
   return (
     <div className="quickfind">
-      <div className="quickfind-chips">
-        <span className="quickfind-label">Filter</span>
-        <div className="chip-group">
-          {ALLIANCE_CHIPS.map((c) => (
-            <button
-              key={c.value}
-              className={`filter-chip${alliance === c.value ? ' active' : ''}`}
-              onClick={() => {
-                activateSearch()
-                setAlliance(c.value)
-              }}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-        <div className="quickfind-divider" />
-        <div className="chip-group">
-          {TYPE_CHIPS.map((c) => (
-            <button
-              key={c.value}
-              className={`filter-chip${typeFilter === c.value ? ' active' : ''}`}
-              onClick={() => {
-                activateSearch()
-                setTypeFilter(c.value)
-              }}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-        <div className="quickfind-divider" />
-        <div className="chip-group">
-          <span className="quickfind-label">Color</span>
-          {SHADE_CHIPS.map((c) => (
-            <button
-              key={c.value}
-              className={`filter-chip${shade === c.value ? ' active' : ''}`}
-              onClick={() => setShade(c.value)}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="quickfind-search">
         <input
           id="library-search-input"
@@ -113,10 +128,39 @@ export default function QuickFindBar(): JSX.Element {
           }}
           placeholder="Search — try an opmode, “red”, “blue”, a tag, or a filename…"
         />
+        <button
+          className="quick-btn library-import-btn"
+          disabled={
+            !sourceConnected ||
+            hubLogsLoading ||
+            !tree ||
+            (!!activeSessionNode && activeSessionLoading) ||
+            catchUpLogs.length === 0 ||
+            importing
+          }
+          onClick={requestCatchUpImport}
+          title={
+            !sourceConnected
+              ? `${sourceName} unavailable`
+              : catchUpLogs.length === 0
+                ? 'No unimported logs newer than the latest imported log'
+                : catchUpLogs.length === 1
+                  ? `Import the latest unimported log into ${quickTargetLabel}`
+                  : `Import all unimported logs newer than the latest imported log into ${quickTargetLabel}`
+          }
+        >
+          {importing
+            ? 'Importing…'
+            : catchUpLogs.length === 0
+              ? `Up to date → ${quickTargetLabel}`
+              : catchUpLogs.length === 1
+                ? `Import latest → ${quickTargetLabel}`
+                : `Import ${catchUpLogs.length} new logs → ${quickTargetLabel}`}
+        </button>
         {latest && (
           <button
             className="latest-btn"
-            onClick={() => latestPath && openSession(latestPath)}
+            onClick={() => latestPath && focusLog(latestPath, latest.filename)}
             title={latest.filename}
           >
             <span className={`dot ${allianceClass(latest.alliance)}`} />
@@ -128,6 +172,18 @@ export default function QuickFindBar(): JSX.Element {
           </button>
         )}
       </div>
+      {showStaleWarning && activeSessionNode && latestActiveLogTime !== null && (
+        <StaleSessionImportDialog
+          sessionLabel={activeSessionNode.displayName}
+          dateKey={dateKey}
+          latestLogLabel={formatTimestamp(new Date(latestActiveLogTime).toISOString())}
+          logCount={catchUpLogs.length}
+          busy={importing}
+          onCancel={() => setShowStaleWarning(false)}
+          onUseCurrentSession={() => void importCatchUp('active').catch(() => {})}
+          onUseDateSession={() => void importCatchUp('date').catch(() => {})}
+        />
+      )}
     </div>
   )
 }

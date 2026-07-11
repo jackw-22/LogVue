@@ -16,6 +16,35 @@ interface WatcherState {
 }
 
 let current: WatcherState | null = null
+let pauseDepth = 0
+
+function scheduleFlush(state: WatcherState): void {
+  if (state.timer) clearTimeout(state.timer)
+  if (pauseDepth > 0) {
+    state.timer = null
+    return
+  }
+  state.timer = setTimeout(() => flush(state), DEBOUNCE_MS)
+}
+
+/**
+ * Hold watcher rebuilds during an app-owned multi-file mutation. Chokidar events
+ * are retained and coalesced into one rebuild after the outermost mutation ends.
+ */
+export function pauseArchiveWatcher(): () => void {
+  pauseDepth += 1
+  if (current?.timer) {
+    clearTimeout(current.timer)
+    current.timer = null
+  }
+  let resumed = false
+  return () => {
+    if (resumed) return
+    resumed = true
+    pauseDepth = Math.max(0, pauseDepth - 1)
+    if (pauseDepth === 0 && current && current.paths.size > 0) scheduleFlush(current)
+  }
+}
 
 export function shouldIgnoreArchivePath(path: string): boolean {
   if (path.split(/[\\/]+/).includes(INTERNAL_DIR)) return true
@@ -44,8 +73,7 @@ export function startArchiveWatcher(root: string | null | undefined): void {
   const queue = (path: string) => {
     if (shouldIgnoreArchivePath(path)) return
     state.paths.add(path)
-    if (state.timer) clearTimeout(state.timer)
-    state.timer = setTimeout(() => flush(state), DEBOUNCE_MS)
+    scheduleFlush(state)
   }
 
   state.watcher
@@ -64,6 +92,7 @@ export function stopArchiveWatcher(): void {
   if (current.timer) clearTimeout(current.timer)
   void current.watcher.close()
   current = null
+  pauseDepth = 0
 }
 
 function flush(state: WatcherState): void {

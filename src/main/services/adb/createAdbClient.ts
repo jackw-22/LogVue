@@ -6,7 +6,7 @@ import type { AdbStatus } from '@shared/types/hublog'
 export function createAdbClient(settings?: AppSettings): AdbLike {
   const fakeHubRoot = process.env[FAKE_ADB_HUB_ENV]
   if (settings?.hubDataSource === 'folder' && settings.hubLogFolder) {
-    return new FakeAdbClient(settings.hubLogFolder, 0)
+    return new FakeAdbClient(settings.hubLogFolder, settings.folderTimeOffsetMinutes * 60_000)
   }
   if (settings?.hubDataSource === 'folder') return new MissingHubLogFolderClient()
   return fakeHubRoot ? new FakeAdbClient(fakeHubRoot) : new AdbClient()

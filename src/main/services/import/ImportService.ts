@@ -42,7 +42,8 @@ export async function importToSession(
   adb: AdbLike,
   root: string | null | undefined,
   req: ImportRequest,
-  hooks?: ImportHooks
+  hooks?: ImportHooks,
+  reindexAfter = true
 ): Promise<ImportResult> {
   if (!req.force) {
     const store = getIndexStore(root)
@@ -88,7 +89,7 @@ export async function importToSession(
     ...metadata,
     files: [...metadata.files, file]
   })
-  reindexSession(root, req.sessionPath)
+  if (reindexAfter) reindexSession(root, req.sessionPath)
 
   const session: Session = {
     path: req.sessionPath,
@@ -129,7 +130,8 @@ async function importEach(
             sessionPath,
             force
           },
-          hooks
+          hooks,
+          false
         )
       )
     } catch (err) {
@@ -141,6 +143,10 @@ async function importEach(
       results.push(result)
     }
   }
+  // Re-reading every accumulated RLOG and replacing the session's index rows for
+  // each individual file makes a batch quadratic. The metadata file is already
+  // updated after every pull, so one final projection produces the same index.
+  reindexSession(root, sessionPath)
   return results
 }
 

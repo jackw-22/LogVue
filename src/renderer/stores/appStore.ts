@@ -5,6 +5,7 @@ import {
   PRACTICE_FILTER_TYPES
 } from '@shared/constants/sessionTypes'
 import type { SessionQuery } from '@shared/types/query'
+import type { SessionFileSort } from '../lib/sessionFiles'
 
 /** Which top-level view the main pane shows. */
 export type View = 'archive' | 'device'
@@ -18,6 +19,13 @@ export type ShadeMode = 'stripe' | 'tint'
 /** The "All logs" dashboard layout. */
 export type DashboardMode = 'flat' | 'grouped'
 
+export interface FocusedLog {
+  sessionPath: string
+  filename: string
+  /** Changes for repeat clicks so the row can replay its halo animation. */
+  requestId: number
+}
+
 interface AppState {
   /** Absolute path of the currently selected session/folder, or null. */
   selectedPath: string | null
@@ -27,6 +35,9 @@ interface AppState {
   setView: (view: View) => void
   /** Select a session and jump to the Archive view (used from log rows / hub links). */
   openSession: (path: string) => void
+  /** Open a session and focus one exact log row (used by search results and note mentions). */
+  focusLog: (sessionPath: string, filename: string) => void
+  focusedLog: FocusedLog | null
 
   // ── quick-find (spec §12, prototype quick-find bar) ────────
   search: string
@@ -42,14 +53,24 @@ interface AppState {
   /** Show RLOG-embedded metadata chips in file lists (applies to all sessions). */
   showFileMeta: boolean
   setShowFileMeta: (showFileMeta: boolean) => void
+  /** File ordering used in every session view and persisted between launches. */
+  sessionFileSort: SessionFileSort
+  setSessionFileSort: (sessionFileSort: SessionFileSort) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
   selectedPath: null,
-  select: (path) => set({ selectedPath: path }),
+  select: (path) => set({ selectedPath: path, focusedLog: null }),
   view: 'archive',
   setView: (view) => set({ view }),
-  openSession: (path) => set({ selectedPath: path, view: 'archive' }),
+  openSession: (path) => set({ selectedPath: path, view: 'archive', focusedLog: null }),
+  focusLog: (sessionPath, filename) =>
+    set((state) => ({
+      selectedPath: sessionPath,
+      view: 'archive',
+      focusedLog: { sessionPath, filename, requestId: (state.focusedLog?.requestId ?? 0) + 1 }
+    })),
+  focusedLog: null,
 
   search: '',
   setSearch: (search) => set({ search }),
@@ -65,6 +86,14 @@ export const useAppStore = create<AppState>((set) => ({
   setShowFileMeta: (showFileMeta) => {
     globalThis.localStorage?.setItem('logvue.showFileMeta', showFileMeta ? '1' : '0')
     set({ showFileMeta })
+  },
+  sessionFileSort:
+    globalThis.localStorage?.getItem('logvue.sessionFileSort') === 'oldest'
+      ? 'oldest'
+      : 'alphabetical',
+  setSessionFileSort: (sessionFileSort) => {
+    globalThis.localStorage?.setItem('logvue.sessionFileSort', sessionFileSort)
+    set({ sessionFileSort })
   }
 }))
 

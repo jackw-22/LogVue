@@ -9,6 +9,8 @@
   --accent-hover: #2f6fe0;
   --good: #7ee787;
   --warn: #e3b341;
+  --reference: #a855f7;
+  --mention: var(--reference);
   --red: #ef4444;
   --blue: #3b82f6;
   --none: #5b6472;
@@ -340,60 +342,9 @@ input[type="checkbox"] {
 
 /* ── quick-find bar (archive view) ────────────────────────── */
 .quickfind {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   padding: 10px 16px;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
-}
-.quickfind-chips {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  opacity: 0.85;
-}
-.quickfind-label {
-  font-size: 10px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  flex: none;
-  white-space: nowrap;
-}
-.chip-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
-}
-.quickfind-divider {
-  width: 1px;
-  align-self: stretch;
-  background: var(--border);
-  flex: none;
-}
-.filter-chip {
-  font-size: 0.7rem;
-  border-radius: 6px;
-  padding: 0.2rem 0.5rem;
-  white-space: nowrap;
-  flex: none;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--muted);
-  font-weight: 500;
-}
-.filter-chip:hover {
-  background: var(--panel-2);
-  color: var(--text);
-}
-.filter-chip.active {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
-  font-weight: 600;
 }
 .quickfind-search {
   display: flex;
@@ -406,6 +357,12 @@ input[type="checkbox"] {
   background: var(--panel);
   padding: 0.45rem 0.7rem;
   font-size: 0.9rem;
+}
+.library-import-btn {
+  flex: none;
+  padding: 0.4rem 0.7rem;
+  font-size: 12px;
+  white-space: nowrap;
 }
 .latest-btn {
   display: flex;
@@ -649,6 +606,10 @@ input[type="checkbox"] {
 .tree-toggle.empty {
   pointer-events: none;
 }
+.tree-toggle.leaf-dot {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
 .tree-indent {
   width: calc(var(--tree-depth, 0) * 22px);
   align-self: stretch;
@@ -660,6 +621,13 @@ input[type="checkbox"] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.session-type-icon {
+  width: 18px;
+  flex: none;
+  font-size: 0.95rem;
+  line-height: 1;
+  text-align: center;
 }
 .tree-name.folder {
   color: var(--muted);
@@ -850,6 +818,11 @@ input[type="checkbox"] {
   gap: 10px;
   min-width: 0;
 }
+.details-session-icon {
+  flex: none;
+  font-size: 1.2rem;
+  line-height: 1;
+}
 .title-input {
   flex: 1;
   min-width: 0;
@@ -990,6 +963,7 @@ section h3 {
   gap: 6px;
 }
 .file-list li {
+  position: relative;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -998,6 +972,7 @@ section h3 {
   border: 1px solid var(--border);
   border-radius: 7px;
   padding: 0.5rem 0.7rem;
+  transition: background 0.7s ease, border-color 0.7s ease, box-shadow 0.7s ease;
 }
 .files-head {
   display: flex;
@@ -1005,12 +980,24 @@ section h3 {
   justify-content: space-between;
   gap: 10px;
 }
+.files-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.7rem;
+}
 .meta-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   cursor: pointer;
   user-select: none;
+}
+.file-sort-select {
+  width: auto;
+  min-width: 135px;
+  padding: 0.3rem 1.7rem 0.3rem 0.5rem;
+  font-size: 0.75rem;
 }
 /* RLOG-embedded metadata chips: a full-width second row inside the file row. */
 .file-meta {
@@ -1057,6 +1044,13 @@ button.chip.meta.more {
 .file-list button {
   white-space: nowrap;
 }
+.file-list .mention-log-button {
+  width: 28px;
+  padding-inline: 0;
+  color: #fff;
+  font-family: var(--mono);
+  font-weight: 700;
+}
 .context-menu {
   position: fixed;
   z-index: 50;
@@ -1099,6 +1093,120 @@ button.chip.meta.more {
   line-height: 1.5;
   font-size: 0.85rem;
   padding: 0.6rem 0.7rem;
+}
+.file-pulse-overlay {
+  position: absolute;
+  z-index: 2;
+  inset: -2px;
+  border: 1px solid var(--reference);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--reference) 24%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  will-change: opacity, transform;
+}
+.rich-notes-shell {
+  position: relative;
+}
+.rich-notes {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+.rich-notes:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.rich-notes:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  pointer-events: none;
+}
+.log-mention {
+  display: inline-block;
+  position: relative;
+  padding: 0.08rem 0.28rem;
+  border: 1px solid color-mix(in srgb, var(--mention) 88%, var(--border));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--mention) 48%, var(--panel));
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.log-mention.just-added::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--mention) 40%, transparent);
+  pointer-events: none;
+  will-change: opacity, transform;
+  animation: mention-added-pulse 1200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes mention-added-pulse {
+  0% {
+    opacity: 0.32;
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+.log-mention:hover {
+  background: color-mix(in srgb, var(--mention) 62%, var(--panel));
+  text-decoration: underline;
+}
+.mention-menu {
+  position: absolute;
+  z-index: 40;
+  width: min(430px, calc(100% - 16px));
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.3);
+}
+.mention-menu button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.48rem 0.58rem;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+.mention-menu button.active,
+.mention-menu button:hover {
+  background: var(--panel-2);
+}
+.mention-menu button strong {
+  font-size: 0.82rem;
+  color: var(--reference);
+}
+.mention-menu button span {
+  width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .notes-head {
   display: flex;
@@ -1180,6 +1288,26 @@ button.chip.meta.more {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 0.75rem;
+}
+.suggested-head.collapsed {
+  margin-bottom: 0;
+}
+.suggested-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+.suggested-toggle {
+  border: 0;
+  padding: 0.1rem 0.2rem;
+  color: var(--muted);
+  background: transparent;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+.suggested-toggle:hover {
+  color: var(--text);
+  background: var(--panel-2);
 }
 .suggested-head h3 {
   margin-bottom: 0.2rem;
@@ -1313,6 +1441,15 @@ button.chip.meta.more {
   gap: 0.6rem;
   margin-top: 0.25rem;
 }
+.notes-head h3 {
+  margin-bottom: 0.1rem;
+}
+.file-list li.focused-log {
+  z-index: 1;
+  border-color: var(--reference);
+  background: color-mix(in srgb, var(--reference) 12%, var(--panel));
+  box-shadow: 0 0 0 1px var(--reference), 0 0 14px color-mix(in srgb, var(--reference) 24%, transparent);
+}
 .delete-session-modal {
   border-color: color-mix(in srgb, var(--red) 62%, var(--border));
 }
@@ -1326,6 +1463,16 @@ button.chip.meta.more {
 .delete-session-modal .danger-copy {
   color: #ff6477;
   font-weight: 700;
+}
+.stale-session-import-modal {
+  border-color: color-mix(in srgb, var(--warn) 62%, var(--border));
+}
+.stale-session-import-modal p {
+  line-height: 1.5;
+  color: var(--muted);
+}
+.stale-session-import-modal strong {
+  color: var(--text);
 }
 
 /* ── hub log import ───────────────────────────────────────── */
@@ -1450,6 +1597,37 @@ button.chip.meta.more {
   align-items: center;
   gap: 0.55rem;
 }
+.folder-source-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.folder-source-label {
+  color: var(--muted);
+  font-size: 0.69rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.folder-path-block {
+  display: block;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+}
+.folder-path-block.empty {
+  color: var(--muted);
+  font-style: italic;
+}
 .ftcscout-dialog-grid {
   display: grid;
   grid-template-columns: minmax(110px, 0.8fr) minmax(120px, 1fr);
@@ -1547,8 +1725,7 @@ button.chip.meta.more {
 }
 
 /* ── activity toasts (background task progress) ──────────────
-   A stack of independent cards, bottom-right; collapses to a pill
-   with an aggregate ring. Cards render Task snapshots pushed from main. */
+   A stack of independent cards, bottom-right. Cards render Task snapshots pushed from main. */
 
 @keyframes toast-spin {
   to {
@@ -1580,85 +1757,6 @@ button.chip.meta.more {
   flex-direction: column;
   gap: 10px;
 }
-/* Backed, not bare: the stack floats over the log table, and a transparent
-   header row collides illegibly with the rows behind it. */
-.toasts-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  align-self: flex-end;
-  padding: 3px 8px 3px 11px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
-}
-.toasts-title {
-  font-size: 0.69rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.toasts-collapse {
-  margin-left: auto;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font-size: 0.75rem;
-  padding: 2px 6px;
-  cursor: pointer;
-}
-
-/* collapsed pill */
-.toast-pill {
-  position: fixed;
-  right: 22px;
-  bottom: 22px;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 9px 15px 9px 11px;
-  box-shadow: 0 12px 32px rgb(0 0 0 / 50%);
-  cursor: pointer;
-  font-family: inherit;
-}
-.toast-pill-text {
-  font-size: 0.81rem;
-  font-weight: 600;
-  color: var(--text);
-}
-.toast-pill-sub {
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-.toast-pill-caret {
-  color: var(--muted);
-  font-size: 0.69rem;
-}
-
-/* aggregate ring — conic-gradient donut */
-.ring {
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  flex: none;
-}
-.ring-sm {
-  width: 24px;
-  height: 24px;
-}
-.ring-hole {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--panel);
-}
-
 /* card */
 .toast {
   background: var(--panel);
@@ -1711,6 +1809,45 @@ button.chip.meta.more {
   cursor: pointer;
   padding: 2px 4px;
   flex: none;
+}
+.toast-close {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.69rem;
+}
+.toast-close:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.toast-close-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+.toast-close-track,
+.toast-close-progress {
+  fill: none;
+  stroke-width: 1.5;
+}
+.toast-close-track {
+  stroke: var(--border);
+}
+.toast-close-progress {
+  stroke: var(--good);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 100ms linear;
 }
 
 .toast-badge {
@@ -1876,9 +2013,6 @@ button.chip.meta.more {
   padding-top: 11px;
   border-top: 1px solid var(--border);
 }
-.toast-spacer {
-  flex: 1;
-}
 .toast-link {
   background: transparent;
   border: none;
@@ -1888,18 +2022,12 @@ button.chip.meta.more {
   color: var(--quick);
   cursor: pointer;
 }
-.toast-link.muted {
-  color: var(--muted);
-  font-weight: 500;
-}
-.toast-dismiss-note {
-  font-size: 0.69rem;
-  color: var(--none);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .bar-shimmer,
   .toast {
     animation: none;
+  }
+  .toast-close-progress {
+    transition: none;
   }
 }

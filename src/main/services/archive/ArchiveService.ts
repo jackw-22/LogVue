@@ -105,10 +105,14 @@ export function listFolderFiles(dir: string): FolderFile[] {
     const name = entry.name
     if (RESERVED_NAMES.has(name) || name === NOTES_FILE || name === INDEX_FILE) continue
     let sizeBytes: number | null = null
+    let modifiedAt: string | null = null
     try {
-      sizeBytes = statSync(join(dir, name)).size
+      const stats = statSync(join(dir, name))
+      sizeBytes = stats.size
+      modifiedAt = Number.isFinite(stats.mtimeMs) ? stats.mtime.toISOString() : null
     } catch {
       sizeBytes = null
+      modifiedAt = null
     }
     const rlogMeta = name.toLowerCase().endsWith('.rlog')
       ? extractRlogMetadata(join(dir, name))
@@ -117,6 +121,7 @@ export function listFolderFiles(dir: string): FolderFile[] {
       filename: name,
       kind: trackedKind.get(name) ?? guessFileKind(name),
       sizeBytes,
+      modifiedAt,
       tracked: trackedKind.has(name),
       metadata: rlogMeta && Object.keys(rlogMeta).length > 0 ? rlogMeta : null
     })

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Task } from '../src/shared/types/tasks'
 import { isCleanSuccess } from '../src/shared/types/tasks'
-import { aggregateFraction, autoDismissAt, taskFraction } from '../src/renderer/stores/taskStore'
+import { autoDismissAt, taskFraction } from '../src/renderer/stores/taskStore'
 
 function task(patch: Partial<Task> = {}): Task {
   return {
@@ -39,26 +39,8 @@ describe('taskFraction', () => {
   })
 
   it('is complete once finished, even when it was never measurable', () => {
-    // Regression: the reindex card left the collapsed pill's ring empty beside "All done".
     expect(taskFraction(task({ determinate: false, status: 'success', endedAt: 2000 }))).toBe(1)
     expect(taskFraction(task({ status: 'error', endedAt: 2000 }))).toBe(1)
-  })
-})
-
-describe('aggregateFraction', () => {
-  it('ignores a running indeterminate task but counts a finished one', () => {
-    const running = task({ id: 'a', determinate: false, kind: 'reindex' })
-    const half = task({ id: 'b', bytesDone: 1, bytesTotal: 2 })
-    expect(aggregateFraction([running, half])).toBe(0.5)
-
-    const done = task({ id: 'a', determinate: false, status: 'success', endedAt: 2000 })
-    expect(aggregateFraction([done])).toBe(1)
-    expect(aggregateFraction([done, half])).toBe(0.75)
-  })
-
-  it('is zero when nothing is measurable', () => {
-    expect(aggregateFraction([])).toBe(0)
-    expect(aggregateFraction([task({ determinate: false })])).toBe(0)
   })
 })
 

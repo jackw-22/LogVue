@@ -6,6 +6,7 @@ import {
   usePickHubLogFolder,
   useSetAdbAddress,
   useSetConfirmDeletePopulatedSessions,
+  useSetFolderTimeOffsetMinutes,
   useSetHubDataSource
 } from '../api/hooks'
 
@@ -16,25 +17,43 @@ interface Props {
 
 export default function SettingsDialog({ settings, onClose }: Props): JSX.Element {
   const [adbAddress, setAdbAddressDraft] = useState(settings.adbAddress)
+  const [folderTimeOffset, setFolderTimeOffsetDraft] = useState(
+    String(settings.folderTimeOffsetMinutes)
+  )
   const pickLibrary = usePickArchiveRoot()
   const setAdbAddress = useSetAdbAddress()
   const setHubDataSource = useSetHubDataSource()
   const pickHubLogFolder = usePickHubLogFolder()
   const clearHubLogFolder = useClearHubLogFolder()
+  const setFolderTimeOffset = useSetFolderTimeOffsetMinutes()
   const setDeleteConfirmation = useSetConfirmDeletePopulatedSessions()
   const busy =
     pickLibrary.isPending ||
     setHubDataSource.isPending ||
     pickHubLogFolder.isPending ||
     clearHubLogFolder.isPending ||
+    setFolderTimeOffset.isPending ||
     setDeleteConfirmation.isPending ||
     setAdbAddress.isPending
 
   useEffect(() => setAdbAddressDraft(settings.adbAddress), [settings.adbAddress])
+  useEffect(
+    () => setFolderTimeOffsetDraft(String(settings.folderTimeOffsetMinutes)),
+    [settings.folderTimeOffsetMinutes]
+  )
 
   function commitAdbAddress(): void {
     const trimmed = adbAddress.trim()
     if (trimmed && trimmed !== settings.adbAddress) setAdbAddress.mutate(trimmed)
+  }
+
+  function commitFolderTimeOffset(): void {
+    const minutes = Number(folderTimeOffset)
+    if (Number.isFinite(minutes) && minutes !== settings.folderTimeOffsetMinutes) {
+      setFolderTimeOffset.mutate(minutes)
+    } else if (!Number.isFinite(minutes)) {
+      setFolderTimeOffsetDraft(String(settings.folderTimeOffsetMinutes))
+    }
   }
 
   return (
@@ -79,42 +98,67 @@ export default function SettingsDialog({ settings, onClose }: Props): JSX.Elemen
             </button>
           </div>
 
-          <label className="field">
-            Wireless ADB address
-            <input
-              value={adbAddress}
-              onChange={(e) => setAdbAddressDraft(e.target.value)}
-              onBlur={commitAdbAddress}
-              placeholder="192.168.43.1:5555"
-              disabled={busy}
-            />
-            <span className="muted small">Used by the Connect action in the status pill.</span>
-          </label>
+          {settings.hubDataSource === 'adb' && (
+            <label className="field">
+              Wireless ADB address
+              <input
+                value={adbAddress}
+                onChange={(e) => setAdbAddressDraft(e.target.value)}
+                onBlur={commitAdbAddress}
+                placeholder="192.168.43.1:5555"
+                disabled={busy}
+              />
+              <span className="muted small">Used by the Connect action in the status pill.</span>
+            </label>
+          )}
 
           {settings.hubDataSource === 'folder' && (
-            <div className="folder-source-row">
-              <code className="settings-path" title={settings.hubLogFolder ?? ''}>
-                {settings.hubLogFolder ?? 'No folder selected'}
-              </code>
-              <button
-                type="button"
-                className="ghost sm"
-                onClick={() => pickHubLogFolder.mutate()}
-                disabled={busy}
-              >
-                Choose…
-              </button>
-              {settings.hubLogFolder && (
-                <button
-                  type="button"
-                  className="ghost sm"
-                  onClick={() => clearHubLogFolder.mutate()}
+            <>
+              <div className="folder-source-selection">
+                <span className="folder-source-label">Selected folder</span>
+                <div className="folder-source-row">
+                  <code
+                    className={`folder-path-block${settings.hubLogFolder ? '' : ' empty'}`}
+                    title={settings.hubLogFolder ?? ''}
+                  >
+                    {settings.hubLogFolder ?? 'No folder selected'}
+                  </code>
+                  <button
+                    type="button"
+                    className="ghost sm"
+                    onClick={() => pickHubLogFolder.mutate()}
+                    disabled={busy}
+                  >
+                    Choose…
+                  </button>
+                  {settings.hubLogFolder && (
+                    <button
+                      type="button"
+                      className="ghost sm"
+                      onClick={() => clearHubLogFolder.mutate()}
+                      disabled={busy}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+              <label className="field">
+                Manual folder time correction (minutes)
+                <input
+                  type="number"
+                  step="1"
+                  value={folderTimeOffset}
+                  onChange={(e) => setFolderTimeOffsetDraft(e.target.value)}
+                  onBlur={commitFolderTimeOffset}
                   disabled={busy}
-                >
-                  Clear
-                </button>
-              )}
-            </div>
+                />
+                <span className="muted small">
+                  Added to folder log timestamps. Use a positive value to move them later or a
+                  negative value to move them earlier.
+                </span>
+              </label>
+            </>
           )}
         </section>
 

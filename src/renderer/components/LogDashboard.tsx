@@ -92,7 +92,7 @@ function FlatList({
   canonicalPath: (path: string) => string
 }): JSX.Element {
   const shade = useAppStore((s) => s.shade)
-  const openSession = useAppStore((s) => s.openSession)
+  const focusLog = useAppStore((s) => s.focusLog)
   return (
     <div className="log-list">
       {logs.map((row) => {
@@ -101,7 +101,7 @@ function FlatList({
           <div
             key={`${canonicalPath(row.sessionPath)}/${row.filename}`}
             className={`log-row${shade === 'tint' ? ` tint-${colour}` : ''}`}
-            onClick={() => openSession(canonicalPath(row.sessionPath))}
+            onClick={() => focusLog(canonicalPath(row.sessionPath), row.filename)}
             title={row.filename}
           >
             <span className={`stripe ${colour}`} />
@@ -128,6 +128,7 @@ function GroupedList({
 }): JSX.Element {
   const shade = useAppStore((s) => s.shade)
   const openSession = useAppStore((s) => s.openSession)
+  const focusLog = useAppStore((s) => s.focusLog)
 
   // Sections in first-occurrence order — logs arrive newest-first, so the most
   // recently active session leads.
@@ -165,7 +166,7 @@ function GroupedList({
               <div
                 key={row.filename}
                 className={`log-row nested${shade === 'tint' ? ` tint-${colour}` : ''}`}
-                onClick={() => openSession(path)}
+                onClick={() => focusLog(path, row.filename)}
                 title={row.filename}
               >
                 <span className="kind-badge">{kindBadge(row.kind)}</span>
