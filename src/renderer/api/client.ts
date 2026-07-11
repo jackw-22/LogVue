@@ -13,8 +13,7 @@ import type { FtcScoutEventSearchRequest, FtcScoutSyncRequest } from '@shared/ty
 export const api = {
   getInfo: () => window.api.invoke('app:getInfo'),
   mcp: {
-    status: () => window.api.invoke('mcp:status'),
-    getToken: () => window.api.invoke('mcp:getToken')
+    status: () => window.api.invoke('mcp:status')
   },
   settings: {
     get: () => window.api.invoke('settings:get'),

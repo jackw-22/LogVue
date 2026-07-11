@@ -5,7 +5,7 @@ import {
   type ServerResponse
 } from 'node:http'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { app } from 'electron'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -27,18 +27,30 @@ export const MCP_HOST = '0.0.0.0'
 export const MCP_PORT = 47831
 export const MCP_PATH = '/mcp'
 export const MCP_DISCOVERY_FILE = 'mcp.json'
+export const MCP_BRIDGE_FILE = 'logvue-mcp.cjs'
 
 let httpServer: HttpServer | null = null
 let bearerToken: string | null = null
 let discoveryPath: string | null = null
 let lastRequestAt: string | null = null
 
+function mcpDataPath(): string {
+  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
+    return join(process.env.LOCALAPPDATA, 'LogVue', 'MCP')
+  }
+  return join(app.getPath('userData'), 'MCP')
+}
+
 function appDiscoveryPath(): string {
-  return join(app.getPath('userData'), MCP_DISCOVERY_FILE)
+  return join(mcpDataPath(), MCP_DISCOVERY_FILE)
+}
+
+function appBridgePath(): string {
+  return join(mcpDataPath(), MCP_BRIDGE_FILE)
 }
 
 function loadStableBearerToken(): string {
-  const candidates = [appDiscoveryPath()]
+  const candidates = [appDiscoveryPath(), join(app.getPath('userData'), MCP_DISCOVERY_FILE)]
   const archiveRoot = getSettings().archiveRoot
   if (archiveRoot) candidates.push(join(archiveRoot, INTERNAL_DIR, MCP_DISCOVERY_FILE))
   for (const candidate of candidates) {
@@ -57,15 +69,12 @@ export function getMcpStatus(): McpStatus {
   return {
     running: httpServer !== null,
     discoveryReady: existsSync(path),
+    bridgeReady: existsSync(appBridgePath()),
     endpoint: `http://127.0.0.1:${MCP_PORT}${MCP_PATH}`,
     discoveryPath: path,
+    bridgePath: appBridgePath(),
     lastRequestAt
   }
-}
-
-export function getMcpToken(): string {
-  if (!bearerToken) throw new Error('MCP server is not running')
-  return bearerToken
 }
 
 function result(value: unknown) {
@@ -192,6 +201,7 @@ export async function startMcpServer(): Promise<void> {
   if (httpServer) return
   bearerToken = loadStableBearerToken()
   lastRequestAt = null
+  installMcpBridge()
 
   httpServer = createServer((req, res) => {
     if (req.url !== MCP_PATH) {
@@ -217,6 +227,21 @@ export async function startMcpServer(): Promise<void> {
   })
   writeDiscoveryFile(bearerToken)
   console.info(`LogVue MCP server listening on port ${MCP_PORT} (loopback + authenticated WSL access)`)
+}
+
+/** Publish a dependency-bundled bridge at a stable path outside the app install. */
+function installMcpBridge(): void {
+  const packagedSource = join(__dirname, 'mcpBridge.js')
+  const developmentSource = join(__dirname, '../mcp/mcpBridge.js')
+  const source = !app.isPackaged && existsSync(developmentSource) ? developmentSource : packagedSource
+  const destination = appBridgePath()
+  mkdirSync(mcpDataPath(), { recursive: true })
+  copyFileSync(source, destination)
+  try {
+    chmodSync(destination, 0o700)
+  } catch {
+    // Windows does not implement POSIX executable permissions.
+  }
 }
 
 async function handleMcpRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -265,7 +290,7 @@ function isLoopbackHostname(url: string): boolean {
 
 function writeDiscoveryFile(token: string): void {
   const nextPath = appDiscoveryPath()
-  mkdirSync(app.getPath('userData'), { recursive: true })
+  mkdirSync(mcpDataPath(), { recursive: true })
   writeFileSync(
     nextPath,
     JSON.stringify({ version: 1, port: MCP_PORT, path: MCP_PATH, token, pid: process.pid }, null, 2) + '\n',

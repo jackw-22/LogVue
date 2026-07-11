@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { connect } from 'node:net'
-import { resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js'
@@ -15,9 +15,15 @@ const Discovery = z.object({
 })
 
 async function main(): Promise<void> {
-  const requestedPath = process.argv[2]
-  if (!requestedPath) throw new Error('Usage: logvue-mcp-bridge <LogVue user-data>/mcp.json')
-  const discovery = Discovery.parse(JSON.parse(readFileSync(resolve(requestedPath), 'utf8')))
+  // LogVue installs this bridge beside mcp.json. Retain the optional argument
+  // for compatibility with configurations created by the prototype.
+  const discoveryPath = process.argv[2]
+    ? resolve(process.argv[2])
+    : join(dirname(resolve(process.argv[1])), 'mcp.json')
+  if (!existsSync(discoveryPath)) {
+    throw new Error(`LogVue MCP connection details were not found at ${discoveryPath}. Start LogVue and try again.`)
+  }
+  const discovery = Discovery.parse(JSON.parse(readFileSync(discoveryPath, 'utf8')))
   const host = (await portIsOpen('127.0.0.1', discovery.port)) ? '127.0.0.1' : windowsHostFromDefaultRoute()
   const url = new URL(`http://${host}:${discovery.port}${discovery.path}`)
 
@@ -48,10 +54,21 @@ function setNegotiatedProtocolVersion(transport: StreamableHTTPClientTransport, 
 }
 
 function windowsHostFromDefaultRoute(): string {
+  if (!isWsl()) throw new Error('LogVue is not reachable on loopback; start LogVue and try again')
   const output = execFileSync('ip', ['route', 'show', 'default'], { encoding: 'utf8' })
   const gateway = /\bvia\s+(\S+)/.exec(output)?.[1]
   if (!gateway) throw new Error('Could not discover the Windows host from the WSL default route')
   return gateway
+}
+
+function isWsl(): boolean {
+  if (process.platform !== 'linux') return false
+  if (process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP) return true
+  try {
+    return /microsoft/i.test(readFileSync('/proc/sys/kernel/osrelease', 'utf8'))
+  } catch {
+    return false
+  }
 }
 
 function portIsOpen(host: string, port: number): Promise<boolean> {

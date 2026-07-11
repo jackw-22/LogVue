@@ -308,10 +308,6 @@ export function useMcpStatus() {
   })
 }
 
-export function useMcpToken() {
-  return useMutation({ mutationFn: api.mcp.getToken })
-}
-
 export function useConnectAdb() {
   const qc = useQueryClient()
   return useMutation({

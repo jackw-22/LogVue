@@ -44,12 +44,14 @@ export interface AppInfo {
   platform: NodeJS.Platform
 }
 
-/** Live state of the stateless MCP HTTP endpoint and its app-level discovery file. */
+/** Live state and stable client configuration for LogVue's MCP endpoint. */
 export interface McpStatus {
   running: boolean
   discoveryReady: boolean
+  bridgeReady: boolean
   endpoint: string
   discoveryPath: string
+  bridgePath: string
   lastRequestAt: string | null
 }
 
@@ -66,10 +68,8 @@ export interface IpcApi {
   'app:getInfo': () => Promise<AppInfo>
 
   // ── MCP ────────────────────────────────────────────────────
-  /** Whether the MCP endpoint and app-level discovery file are available. */
+  /** Whether the MCP endpoint, discovery file, and installed bridge are available. */
   'mcp:status': () => Promise<McpStatus>
-  /** Return the current MCP bearer token for an explicit user copy action. */
-  'mcp:getToken': () => Promise<string>
 
   // ── settings / archive root ────────────────────────────────
   'settings:get': () => Promise<AppSettings>

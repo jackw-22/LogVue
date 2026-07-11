@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { formatRelative } from '../lib/time'
-import { useMcpStatus, useMcpToken } from '../api/hooks'
+import { useMcpStatus } from '../api/hooks'
 
 interface Props {
   archiveRoot: string | null
@@ -14,22 +14,25 @@ function toWslPath(path: string): string {
 
 export default function McpSetupDialog({ archiveRoot, onClose }: Props): JSX.Element {
   const { data: status } = useMcpStatus()
-  const token = useMcpToken()
   const [copied, setCopied] = useState<string | null>(null)
-  const available = !!status?.running && !!status.discoveryReady
+  const available = !!status?.running && !!status.discoveryReady && !!status.bridgeReady
   const discoveryPath = status?.discoveryPath ?? '<LogVue user-data>/mcp.json'
-  const wslDiscoveryPath = status ? toWslPath(status.discoveryPath) : discoveryPath
-  const setupCommand = `codex mcp add logvue -- node /path/to/LogVue/out/main/mcpBridge.js ${wslDiscoveryPath}`
+  const bridgePath = status?.bridgePath ?? '<LogVue user-data>/logvue-mcp.cjs'
+  const wslBridgePath = toWslPath(bridgePath)
+  const clientBridgePath = wslBridgePath !== bridgePath ? wslBridgePath : bridgePath
+  const quotedBridgePath = JSON.stringify(clientBridgePath)
+  const serverConfig = JSON.stringify({ type: 'stdio', command: 'node', args: [bridgePath] }, null, 2)
+  const wslServerConfig =
+    wslBridgePath === bridgePath
+      ? null
+      : JSON.stringify({ type: 'stdio', command: 'node', args: [wslBridgePath] }, null, 2)
+  const codexCommand = `codex mcp add logvue -- node ${quotedBridgePath}`
+  const claudeCommand = `claude mcp add --scope user logvue -- node ${quotedBridgePath}`
 
   async function copyText(label: string, value: string): Promise<void> {
     await navigator.clipboard.writeText(value)
     setCopied(label)
     window.setTimeout(() => setCopied(null), 1600)
-  }
-
-  async function copyToken(): Promise<void> {
-    const value = await token.mutateAsync()
-    await copyText('token', value)
   }
 
   return (
@@ -55,16 +58,18 @@ export default function McpSetupDialog({ archiveRoot, onClose }: Props): JSX.Ele
         </div>
 
         <p className="mcp-setup-intro">
-          Configure the MCP bridge once for this LogVue installation. It follows the library selected in LogVue,
-          so changing the library does not require changing the MCP configuration.
+          Add LogVue as a local stdio MCP server once in your agent client. This setup remains valid when LogVue is
+          updated or you select a different library.
         </p>
 
         <section className="settings-section vertical">
-          <h3>1. Start LogVue</h3>
-          <span className="muted small">The bridge reads this stable app-level discovery file:</span>
-          <code className="settings-path" title={discoveryPath}>
-            {discoveryPath}
+          <h3>1. LogVue MCP files</h3>
+          <span className="muted small">LogVue keeps the bridge at this stable per-user path:</span>
+          <code className="settings-path" title={bridgePath}>
+            {bridgePath}
           </code>
+          <span className="muted small">Its connection details are managed automatically in:</span>
+          <code className="settings-path" title={discoveryPath}>{discoveryPath}</code>
           <span className="muted small">Active library:</span>
           <code className="settings-path" title={archiveRoot ?? ''}>
             {archiveRoot ?? 'No library selected'}
@@ -72,31 +77,49 @@ export default function McpSetupDialog({ archiveRoot, onClose }: Props): JSX.Ele
         </section>
 
         <section className="settings-section vertical">
-          <h3>2. Register the bridge with Codex</h3>
-          <span className="muted small">Run this once from WSL, replacing the LogVue source path if needed:</span>
-          <code className="mcp-command">{setupCommand}</code>
+          <h3>2. Add the local MCP server</h3>
+          <span className="muted small">
+            Use these standard stdio server details in any MCP-compatible client running on the same operating
+            system as LogVue.
+          </span>
+          <code className="mcp-command">{serverConfig}</code>
           <button
             type="button"
             className="ghost sm mcp-copy-button"
-            onClick={() => void copyText('command', setupCommand)}
+            onClick={() => void copyText('config', serverConfig)}
           >
-            {copied === 'command' ? 'Copied' : 'Copy setup command'}
+            {copied === 'config' ? 'Copied' : 'Copy server configuration'}
           </button>
+          {wslServerConfig && (
+            <>
+              <span className="muted small">For a client running inside WSL, use the WSL-visible path:</span>
+              <code className="mcp-command">{wslServerConfig}</code>
+              <button
+                type="button"
+                className="ghost sm mcp-copy-button"
+                onClick={() => void copyText('wsl-config', wslServerConfig)}
+              >
+                {copied === 'wsl-config' ? 'Copied' : 'Copy WSL server configuration'}
+              </button>
+            </>
+          )}
         </section>
 
         <section className="settings-section vertical">
-          <h3>3. Token</h3>
+          <h3>Client shortcuts</h3>
           <span className="muted small">
-            The token is a stable random credential stored in the discovery file. Copy it only when configuring a
-            direct non-loopback MCP client; the bridge reads it automatically.
+            These commands register the same server details in common clients
+            {wslServerConfig ? ' running inside WSL.' : '.'}
           </span>
-          <button
-            type="button"
-            className="ghost sm mcp-copy-button"
-            disabled={!status?.running || token.isPending}
-            onClick={() => void copyToken()}
-          >
-            {token.isPending ? 'Reading…' : copied === 'token' ? 'Copied' : 'Copy token'}
+          <span className="muted small">Codex</span>
+          <code className="mcp-command">{codexCommand}</code>
+          <button type="button" className="ghost sm mcp-copy-button" onClick={() => void copyText('codex', codexCommand)}>
+            {copied === 'codex' ? 'Copied' : 'Copy Codex command'}
+          </button>
+          <span className="muted small">Claude Code</span>
+          <code className="mcp-command">{claudeCommand}</code>
+          <button type="button" className="ghost sm mcp-copy-button" onClick={() => void copyText('claude', claudeCommand)}>
+            {copied === 'claude' ? 'Copied' : 'Copy Claude Code command'}
           </button>
         </section>
 

@@ -116,13 +116,13 @@ export default function Toolbar({ settings, onNewTopLevel, onSettings, onMcpSetu
 }
 
 function McpBadge({ status, onClick }: { status: McpStatus | undefined; onClick: () => void }): JSX.Element {
-  const available = !!status?.running && !!status.discoveryReady
+  const available = !!status?.running && !!status.discoveryReady && !!status.bridgeReady
   const availabilityLabel = !status
     ? 'MCP checking…'
     : available
       ? 'MCP available'
       : status.running
-        ? 'MCP waiting for library'
+        ? 'MCP setup incomplete'
         : 'MCP unavailable'
   const requestLabel =
     available && status

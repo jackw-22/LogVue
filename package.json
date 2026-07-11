@@ -6,8 +6,8 @@
   "license": "MIT",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "dev": "vite build --config vite.mcp.config.ts --outDir out/mcp && electron-vite dev",
+    "build": "electron-vite build && vite build --config vite.mcp.config.ts",
     "preview": "electron-vite preview",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",

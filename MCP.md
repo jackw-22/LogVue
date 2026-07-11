@@ -6,17 +6,21 @@ While the LogVue desktop application is running, it exposes an MCP Streamable HT
 http://127.0.0.1:47831/mcp
 ```
 
-The server is hosted by Electron's main process. MCP-triggered imports therefore use the same ADB client, archive services, index, and Activity task registry as renderer-triggered imports. Non-loopback requests require the stable random bearer token written to LogVue's app-level `<userData>/mcp.json`.
+The server is hosted by Electron's main process. MCP-triggered imports therefore use the same ADB client, archive services, index, and Activity task registry as renderer-triggered imports. Non-loopback requests require the stable random bearer token written beside the installed bridge in LogVue's per-user MCP directory.
 
-## Codex configuration
+## One-time client configuration
 
-For a configuration that works in both WSL NAT and mirrored networking, have Codex launch the included bridge. Replace the discovery path with the WSL path to LogVue's app-level discovery file:
+Each time it starts, LogVue installs a dependency-bundled stdio bridge at a stable per-user path beside `mcp.json`:
 
-```sh
-codex mcp add logvue -- node /path/to/LogVue/out/main/mcpBridge.js /path/to/LogVue/user-data/mcp.json
+```text
+Windows: %LOCALAPPDATA%\LogVue\MCP\logvue-mcp.cjs
+macOS:   ~/Library/Application Support/LogVue/MCP/logvue-mcp.cjs
+Linux:   <Electron userData>/MCP/logvue-mcp.cjs
 ```
 
-Replace `/path/to/LogVue/user-data` with the user-data directory shown in LogVue Settings. The bridge first tries loopback. If that is unavailable, it discovers the current Windows host from WSL's default route and authenticates using the app-level discovery file. The Codex configuration therefore remains stable when the WSL networking mode, active library, or NAT gateway changes.
+Add that file to any MCP-compatible client as a local stdio server with command `node` and the bridge path as its only argument. The MCP setup dialog shows the exact path and provides generic server JSON plus optional Codex and Claude Code commands. No token or discovery-file argument is required.
+
+The configuration remains stable across LogVue updates, library changes, and WSL networking changes. In WSL, use the `/mnt/<drive>/...` spelling shown by the setup dialog. The bridge tries loopback first and only uses WSL default-route discovery when loopback is unavailable.
 
 ## Tools
 

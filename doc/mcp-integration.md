@@ -14,12 +14,12 @@ Do not duplicate general filesystem search or file-editing tools in MCP.
 
 The Electron main process hosts a stateless Streamable HTTP MCP server on port `47831`. Each HTTP POST receives a fresh MCP server and transport, as required by the SDK's stateless lifecycle.
 
-Windows-native and mirrored-network WSL clients can use loopback directly. WSL in NAT mode uses the bundled stdio bridge:
+All MCP clients use the same local stdio bridge. It connects over loopback on Windows, macOS, Linux, and mirrored-network WSL. In WSL NAT mode it falls back to the Windows host:
 
 ```text
-Codex in WSL
+MCP client
   -> stdio MCP
-  -> out/main/mcpBridge.js
+  -> <stable user-data>/MCP/logvue-mcp.cjs
   -> authenticated Streamable HTTP
   -> LogVue Electron main process
 ```
@@ -27,30 +27,33 @@ Codex in WSL
 LogVue permits unauthenticated loopback access and requires a stable random 256-bit bearer token for non-loopback requests. Connection information is stored at the app-level path:
 
 ```text
-<user-data>/mcp.json
+<stable user-data>/MCP/mcp.json
 ```
 
 The active archive is not part of the bridge configuration. Agents discover it from `get_status`, and all archive tools follow the library currently selected in LogVue.
 
-The bridge tries `127.0.0.1` first. If unavailable, it reads WSL's default route to find the current Windows NAT gateway and authenticates with the discovery token.
+The bridge and discovery file live together. The bridge locates discovery automatically, tries `127.0.0.1` first, and only reads WSL's default route when it is actually running under WSL. LogVue refreshes the dependency-bundled bridge on every start.
 
-## Codex installation
+## Client installation
 
-Build and launch LogVue, then confirm `<user-data>/mcp.json` exists. Register the bridge from WSL using the WSL-visible path:
+Start LogVue and open its MCP setup dialog. Add the displayed bridge as a local stdio server using the generic configuration:
 
-```sh
-codex mcp add logvue -- \
-  node /path/to/LogVue/out/main/mcpBridge.js \
-  /path/to/LogVue/user-data/mcp.json
+```json
+{
+  "type": "stdio",
+  "command": "node",
+  "args": ["<displayed path>/logvue-mcp.cjs"]
+}
 ```
 
-Fully restart Codex after configuration or tool-schema changes. Resuming a conversation is supported:
+Client-specific shortcuts configure those same stdio details:
 
 ```sh
-codex resume --last
+codex mcp add logvue -- node "<displayed path>/logvue-mcp.cjs"
+claude mcp add --scope user logvue -- node "<displayed path>/logvue-mcp.cjs"
 ```
 
-Inspect configuration with `codex mcp get logvue` and `codex mcp list`.
+Restart the client after initial configuration or tool-schema changes. Configuration is required once per client, not once per library or LogVue version.
 
 ## Tool contract
 
@@ -108,22 +111,19 @@ The current checkpoint passes the production build, full typecheck, and all 123 
 
 ## Troubleshooting
 
-- Missing `mcp.json`: LogVue has not started the MCP-enabled build on this user profile yet.
+- Missing `mcp.json` or `logvue-mcp.cjs`: LogVue has not started the MCP-enabled build on this user profile yet.
 - WSL `127.0.0.1` fails in NAT mode: use the stdio bridge rather than the direct HTTP URL.
 - HTTP 500 during initialization: ensure each stateless POST creates a fresh MCP server and transport.
-- Codex retains an old failure: fully exit Codex and resume it so configuration and schemas reload.
-- Codex logs are in `~/.codex/logs_2.sqlite`; bridge messages use the `MCP server stderr (node)` prefix.
-- Restart both LogVue and Codex after tool-schema changes.
+- A client retains an old failure: fully exit and restart it so configuration and schemas reload.
+- Restart both LogVue and the MCP client after tool-schema changes.
 
 ## Further work
 
-- Add an installation flow so users do not construct the bridge command manually.
 - Decide whether MCP is enabled by default or controlled by a setting.
 - Add protocol-level tests for initialization, tool listing, authentication, and NAT forwarding.
 - Test Windows, WSL, relative, and archive-escape path resolution.
 - Add a cursor or date boundary if agents need logs older than the newest 100.
 - Improve structured error codes for duplicates, missing sessions, and unavailable sources.
-- Ensure installer packaging includes the bridge and MCP SDK dependencies.
 
 ## Commit history
 

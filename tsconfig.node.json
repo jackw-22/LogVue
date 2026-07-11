@@ -9,6 +9,7 @@
     "src/mcp-bridge/**/*",
     "src/preload/**/*",
     "src/shared/**/*",
-    "electron.vite.config.ts"
+    "electron.vite.config.ts",
+    "vite.mcp.config.ts"
   ]
 }

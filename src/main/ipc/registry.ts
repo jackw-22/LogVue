@@ -18,7 +18,7 @@ import { getAdbClient, refreshAdbClient } from '../services/adb/runtime'
 import { FtcScoutClient } from '../services/ftcscout/FtcScoutClient'
 import { syncFtcScoutEvent } from '../services/ftcscout/syncEvent'
 import { startArchiveWatcher } from '../services/watcher/Watcher'
-import { getMcpStatus, getMcpToken, refreshMcpDiscoveryFile } from '../mcp/server'
+import { getMcpStatus, refreshMcpDiscoveryFile } from '../mcp/server'
 import { listTasks, startTask } from '../services/tasks/TaskService'
 import { runImportTask, runNewSessionImportTask, runSingleImportTask } from '../services/import/importTask'
 
@@ -44,7 +44,6 @@ const handlers: Handlers = {
 
   // ── MCP ──
   'mcp:status': async () => getMcpStatus(),
-  'mcp:getToken': async () => getMcpToken(),
 
   // ── settings / archive root ──
   'settings:get': async () => getSettings(),
