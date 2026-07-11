@@ -102,9 +102,9 @@ Agents must not edit LogVue's internal data, including `index.sqlite` and the ap
 Use the Linux Node installation described in `AGENTS.md`:
 
 ```sh
-PATH=/home/jack/.local/node/bin:$PATH npm run typecheck
-PATH=/home/jack/.local/node/bin:$PATH npm run build
-PATH=/home/jack/.local/node/bin:$PATH TZ=UTC npm test
+PATH=$HOME/.local/node/bin:$PATH npm run typecheck
+PATH=$HOME/.local/node/bin:$PATH npm run build
+PATH=$HOME/.local/node/bin:$PATH TZ=UTC npm test
 ```
 
 The current checkpoint passes the production build, full typecheck, and all 123 tests.

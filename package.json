@@ -1,13 +1,16 @@
 {
   "name": "logvue",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "FTC Control Hub RLOG organiser",
-  "author": "",
-  "license": "MIT",
+  "author": "Jack Wilson",
+  "license": "BSD-3-Clause",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "vite build --config vite.mcp.config.ts --outDir out/mcp && electron-vite dev",
     "build": "electron-vite build && vite build --config vite.mcp.config.ts",
+    "package:win": "npm run build && electron-builder --win --x64",
+    "package:win:installer": "npm run build && electron-builder --win nsis --x64",
+    "package:win:portable": "npm run build && electron-builder --win portable --x64",
     "preview": "electron-vite preview",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
@@ -33,10 +36,57 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "electron": "^31.2.0",
+    "electron-builder": "26.0.12",
     "electron-rebuild": "^3.2.9",
     "electron-vite": "^2.3.0",
     "typescript": "^5.5.3",
     "vite": "^5.3.3",
     "vitest": "^2.0.3"
+  },
+  "build": {
+    "appId": "com.melonbotics.logvue",
+    "productName": "LogVue",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.txt",
+        "to": "THIRD_PARTY_NOTICES.txt"
+      }
+    ],
+    "win": {
+      "icon": "src/renderer/assets/logvue-icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}-${arch}.${ext}"
+    }
   }
 }

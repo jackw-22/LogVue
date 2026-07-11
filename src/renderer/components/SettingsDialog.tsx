@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { AppSettings } from '@shared/types/session'
+import { api } from '../api/client'
 import {
   useClearHubLogFolder,
+  useAppInfo,
   usePickArchiveRoot,
   usePickHubLogFolder,
   useSetAdbAddress,
@@ -16,6 +18,7 @@ interface Props {
 }
 
 export default function SettingsDialog({ settings, onClose }: Props): JSX.Element {
+  const { data: appInfo } = useAppInfo()
   const [adbAddress, setAdbAddressDraft] = useState(settings.adbAddress)
   const [folderTimeOffset, setFolderTimeOffsetDraft] = useState(
     String(settings.folderTimeOffsetMinutes)
@@ -177,6 +180,24 @@ export default function SettingsDialog({ settings, onClose }: Props): JSX.Elemen
             Empty sessions are deleted immediately. You can restore confirmations here after choosing
             “Don’t ask again”.
           </span>
+        </section>
+
+        <section className="settings-section vertical about-section">
+          <h3>About LogVue</h3>
+          <div className="about-copy">
+            <strong>LogVue {appInfo ? `v${appInfo.appVersion}` : ''}</strong>
+            <span className="muted small">© 2026 Jack Wilson · BSD 3-Clause License</span>
+            <span className="muted small">
+              Third-party software notices and license texts are included with this app.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="ghost sm about-notices-button"
+            onClick={() => void api.openThirdPartyNotices()}
+          >
+            View third-party notices
+          </button>
         </section>
 
         <div className="modal-actions">

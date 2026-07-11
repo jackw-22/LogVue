@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { existsSync } from 'fs'
 import { join } from 'path'
 import type { AppInfo, IpcApi } from '@shared/types/ipc'
 import { getSettings, saveSettings } from '../config/settings'
@@ -41,6 +42,14 @@ const handlers: Handlers = {
     node: process.versions.node,
     platform: process.platform
   }),
+  'app:openThirdPartyNotices': async () => {
+    const noticesPath = app.isPackaged
+      ? join(process.resourcesPath, 'THIRD_PARTY_NOTICES.txt')
+      : join(app.getAppPath(), 'THIRD_PARTY_NOTICES.txt')
+    if (!existsSync(noticesPath)) throw new Error('Third-party notices are not available')
+    const error = await shell.openPath(noticesPath)
+    if (error) throw new Error(error)
+  },
 
   // ── MCP ──
   'mcp:status': async () => getMcpStatus(),

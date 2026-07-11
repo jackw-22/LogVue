@@ -26,25 +26,25 @@ function node(path: string, children: SessionNode[] = []): SessionNode {
 
 describe('renderer tree path helpers', () => {
   it('matches Windows paths across slash and case variants', () => {
-    const canonical = 'C:\\Users\\Jack\\LogVue\\Event\\Q4'
-    const variant = 'c:/users/jack/logvue/event/q4'
+    const canonical = 'C:\\Users\\Example\\LogVue\\Event\\Q4'
+    const variant = 'c:/users/example/logvue/event/q4'
 
-    expect(normalizePathKey(canonical)).toBe('c:/users/jack/logvue/event/q4')
+    expect(normalizePathKey(canonical)).toBe('c:/users/example/logvue/event/q4')
     expect(pathsEqual(canonical, variant)).toBe(true)
   })
 
   it('finds the canonical tree node for a variant path', () => {
-    const q4 = node('C:\\Users\\Jack\\LogVue\\Event\\Q4')
-    const tree = [node('C:\\Users\\Jack\\LogVue\\Event', [q4])]
+    const q4 = node('C:\\Users\\Example\\LogVue\\Event\\Q4')
+    const tree = [node('C:\\Users\\Example\\LogVue\\Event', [q4])]
 
-    expect(findNode(tree, 'c:/users/jack/logvue/event/q4')).toBe(q4)
+    expect(findNode(tree, 'c:/users/example/logvue/event/q4')).toBe(q4)
   })
 
   it('keys breadcrumb labels by normalized path', () => {
-    const tree = [node('C:\\Users\\Jack\\LogVue\\Event', [node('C:\\Users\\Jack\\LogVue\\Event\\Q4')])]
+    const tree = [node('C:\\Users\\Example\\LogVue\\Event', [node('C:\\Users\\Example\\LogVue\\Event\\Q4')])]
     const labels = buildPathLabels(tree)
 
-    expect(labels.get('c:/users/jack/logvue/event/q4')?.parentLabel).toBe('Event')
+    expect(labels.get('c:/users/example/logvue/event/q4')?.parentLabel).toBe('Event')
   })
 
   it('includes descendant sessions in a tree node log count', () => {

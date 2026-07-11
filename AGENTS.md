@@ -9,13 +9,13 @@ repository path.
 Prefix commands with:
 
 ```sh
-PATH=/home/jack/.local/node/bin:$PATH npm <command>
+PATH=$HOME/.local/node/bin:$PATH npm <command>
 ```
 
 Examples:
 
 ```sh
-PATH=/home/jack/.local/node/bin:$PATH npm run dev
-PATH=/home/jack/.local/node/bin:$PATH npm run typecheck
-PATH=/home/jack/.local/node/bin:$PATH npm test
+PATH=$HOME/.local/node/bin:$PATH npm run dev
+PATH=$HOME/.local/node/bin:$PATH npm run typecheck
+PATH=$HOME/.local/node/bin:$PATH npm test
 ```

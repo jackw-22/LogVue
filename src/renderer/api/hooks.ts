@@ -11,6 +11,7 @@ import type { FtcScoutEventSearchRequest, FtcScoutSyncRequest } from '@shared/ty
 import { api } from './client'
 
 const keys = {
+  appInfo: ['app', 'info'] as const,
   settings: ['settings'] as const,
   tree: ['archive', 'tree'] as const,
   session: (path: string) => ['archive', 'session', path] as const,
@@ -24,6 +25,10 @@ const keys = {
   logQuery: (q: SessionQuery) => ['index', 'queryLogs', q] as const,
   librarySize: ['index', 'librarySize'] as const,
   ftcScoutEvents: (q: FtcScoutEventSearchRequest) => ['ftcscout', 'events', q] as const
+}
+
+export function useAppInfo() {
+  return useQuery({ queryKey: keys.appInfo, queryFn: api.getInfo, staleTime: Infinity })
 }
 
 export function useSettings() {

@@ -12,6 +12,7 @@ import type { FtcScoutEventSearchRequest, FtcScoutSyncRequest } from '@shared/ty
 /** Thin, typed wrappers over the preload bridge — one call site per channel. */
 export const api = {
   getInfo: () => window.api.invoke('app:getInfo'),
+  openThirdPartyNotices: () => window.api.invoke('app:openThirdPartyNotices'),
   mcp: {
     status: () => window.api.invoke('mcp:status')
   },

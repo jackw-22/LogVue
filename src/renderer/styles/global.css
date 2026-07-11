@@ -1590,6 +1590,15 @@ button.chip.meta.more {
   font-size: 0.9rem;
   margin: 0 0 0.35rem;
 }
+.about-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  line-height: 1.45;
+}
+.about-notices-button {
+  align-self: flex-start;
+}
 .settings-path {
   display: block;
   max-width: 100%;

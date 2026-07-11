@@ -14,7 +14,19 @@ function filenameTimestamp(filename: string): number | null {
   const match = RLOG_TIMESTAMP_RE.exec(filename)
   if (!match) return null
   const [, year, month, day, hour, minute, second, millis] = match
-  return validTimestamp(`${year}-${month}-${day}T${hour}:${minute}:${second}.${millis}`)
+  const parts = [year, month, day, hour, minute, second, millis].map(Number)
+  const [y, mo, d, h, mi, s, ms] = parts
+  const timestamp = Date.UTC(y, mo - 1, d, h, mi, s, ms)
+  const parsed = new Date(timestamp)
+  const valid =
+    parsed.getUTCFullYear() === y &&
+    parsed.getUTCMonth() === mo - 1 &&
+    parsed.getUTCDate() === d &&
+    parsed.getUTCHours() === h &&
+    parsed.getUTCMinutes() === mi &&
+    parsed.getUTCSeconds() === s &&
+    parsed.getUTCMilliseconds() === ms
+  return valid ? timestamp : null
 }
 
 /** Recorded time first, then filename time, import time, and finally filesystem time. */

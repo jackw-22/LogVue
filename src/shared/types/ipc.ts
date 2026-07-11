@@ -66,6 +66,8 @@ export interface IpcApi {
   'app:ping': (msg: string) => Promise<string>
   /** Versions/platform, proving main can answer typed queries. */
   'app:getInfo': () => Promise<AppInfo>
+  /** Open the bundled third-party license notices in the system viewer. */
+  'app:openThirdPartyNotices': () => Promise<void>
 
   // ── MCP ────────────────────────────────────────────────────
   /** Whether the MCP endpoint, discovery file, and installed bridge are available. */
