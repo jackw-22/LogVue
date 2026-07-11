@@ -38,7 +38,14 @@ export default function QuickFindBar(): JSX.Element {
   const setTypeFilter = useAppStore((s) => s.setTypeFilter)
   const shade = useAppStore((s) => s.shade)
   const setShade = useAppStore((s) => s.setShade)
+  const select = useAppStore((s) => s.select)
   const openSession = useAppStore((s) => s.openSession)
+
+  function activateSearch(): void {
+    // Search results live in the Library dashboard. Selecting the root here makes
+    // search work immediately even when the user is viewing a session.
+    select(null)
+  }
 
   // Unfiltered query — the latest log across the whole archive.
   const { data: allLogs } = useLogQuery({})
@@ -55,7 +62,10 @@ export default function QuickFindBar(): JSX.Element {
             <button
               key={c.value}
               className={`filter-chip${alliance === c.value ? ' active' : ''}`}
-              onClick={() => setAlliance(c.value)}
+              onClick={() => {
+                activateSearch()
+                setAlliance(c.value)
+              }}
             >
               {c.label}
             </button>
@@ -67,7 +77,10 @@ export default function QuickFindBar(): JSX.Element {
             <button
               key={c.value}
               className={`filter-chip${typeFilter === c.value ? ' active' : ''}`}
-              onClick={() => setTypeFilter(c.value)}
+              onClick={() => {
+                activateSearch()
+                setTypeFilter(c.value)
+              }}
             >
               {c.label}
             </button>
@@ -93,7 +106,11 @@ export default function QuickFindBar(): JSX.Element {
           id="library-search-input"
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onFocus={activateSearch}
+          onChange={(e) => {
+            activateSearch()
+            setSearch(e.target.value)
+          }}
           placeholder="Search — try an opmode, “red”, “blue”, a tag, or a filename…"
         />
         {latest && (

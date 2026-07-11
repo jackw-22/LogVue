@@ -22,6 +22,10 @@ export class FakeAdbClient implements AdbLike {
     return { connected: true, device: 'Fake Control Hub' }
   }
 
+  async connect(_address: string): Promise<AdbStatus> {
+    return this.getStatus()
+  }
+
   async listRemoteFiles(): Promise<RemoteFile[]> {
     const files = await this.walk(this.hubRoot)
     return Promise.all(

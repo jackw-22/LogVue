@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import type { AppSettings } from '@shared/types/session'
-import { useAdbStatus, usePickArchiveRoot, useRebuildIndex } from '../api/hooks'
+import { useAdbStatus, useConnectAdb, usePickArchiveRoot, useRebuildIndex } from '../api/hooks'
 import { useAppStore } from '../stores/appStore'
 
 interface Props {
@@ -16,6 +16,7 @@ export default function Toolbar({ settings, onNewTopLevel, onSettings }: Props):
   const view = useAppStore((s) => s.view)
   const setView = useAppStore((s) => s.setView)
   const { data: adb } = useAdbStatus()
+  const connect = useConnectAdb()
   const sourceIsFolder = settings.hubDataSource === 'folder'
   const sourceName = sourceIsFolder ? 'Folder Import' : 'Control Hub'
   const sourceConnected = sourceIsFolder ? !!settings.hubLogFolder : !!adb?.connected
@@ -62,7 +63,14 @@ export default function Toolbar({ settings, onNewTopLevel, onSettings }: Props):
             {sourceName}
           </button>
         </div>
-        <SourceBadge connected={sourceConnected} label={sourceLabel} sourceName={sourceName} />
+        <SourceBadge
+          connected={sourceConnected}
+          label={sourceLabel}
+          sourceName={sourceName}
+          address={settings.adbAddress}
+          connecting={connect.isPending}
+          onConnect={!sourceIsFolder && !adb?.adbMissing ? () => connect.mutate() : undefined}
+        />
       </div>
 
       <div className="spacer" />
@@ -98,18 +106,34 @@ export default function Toolbar({ settings, onNewTopLevel, onSettings }: Props):
 function SourceBadge({
   connected,
   label,
-  sourceName
+  sourceName,
+  address,
+  connecting,
+  onConnect
 }: {
   connected: boolean
   label: string
   sourceName: string
+  address: string
+  connecting: boolean
+  onConnect?: () => void
 }): JSX.Element {
+  const connectable = !!onConnect && !connected
+  const displayLabel = connecting ? 'Connecting ADB…' : connectable ? 'Connect ADB' : label
   return (
-    <span
-      className={`status ${connected ? 'ok' : 'off'}`}
-      title={`${sourceName}: ${connected ? 'connected' : 'disconnected'}`}
+    <button
+      type="button"
+      className={`source-status ${connected ? 'ok' : 'off'}${connectable ? ' connectable' : ''}${connecting ? ' connecting' : ''}`}
+      title={
+        connectable
+          ? `Connect ADB to ${address}`
+          : `${sourceName}: ${connected ? 'connected' : 'disconnected'}`
+      }
+      onClick={connectable ? onConnect : undefined}
+      disabled={!connectable || connecting}
     >
-      <span className="dot" /> {label}
-    </span>
+      <span className="dot" />
+      <span>{displayLabel}</span>
+    </button>
   )
 }

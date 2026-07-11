@@ -23,6 +23,21 @@ function inClause(
   return `${col} IN (${names.join(', ')})`
 }
 
+/** Match a search term on the current session or any ancestor grouping session. */
+function descendantTextMatch(param: string): string {
+  const ancestorScope =
+    `(s.path = ancestor.path OR ` +
+    `(substr(s.path, 1, length(ancestor.path)) = ancestor.path ` +
+    `AND substr(s.path, length(ancestor.path) + 1, 1) IN ('/', char(92))))`
+  const ancestorText =
+    `(ancestor.display_name LIKE @${param} ESCAPE '\\'` +
+    ` OR ancestor.event_code LIKE @${param} ESCAPE '\\'` +
+    ` OR EXISTS (SELECT 1 FROM session_tags ancestor_tag` +
+    ` WHERE ancestor_tag.session_id = ancestor.session_id` +
+    ` AND ancestor_tag.tag LIKE @${param} ESCAPE '\\'))`
+  return `EXISTS (SELECT 1 FROM sessions ancestor WHERE ${ancestorScope} AND ${ancestorText})`
+}
+
 /**
  * Turn a {@link SessionQuery} into a parametrised WHERE body over the `sessions`
  * table aliased `s` (with `session_tags`/`files` reachable by correlated subquery).
@@ -38,11 +53,7 @@ export function buildSessionQuery(query: SessionQuery): BuiltQuery {
   const text = query.text?.trim()
   if (text) {
     params.text = `%${text}%`
-    clauses.push(
-      `(s.display_name LIKE @text ESCAPE '\\'` +
-        ` OR s.event_code LIKE @text ESCAPE '\\'` +
-        ` OR EXISTS (SELECT 1 FROM session_tags t WHERE t.session_id = s.session_id AND t.tag LIKE @text ESCAPE '\\'))`
-    )
+    clauses.push(descendantTextMatch('text'))
   }
 
   const types = (query.sessionTypes ?? []).filter(Boolean)

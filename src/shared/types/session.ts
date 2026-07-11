@@ -131,6 +131,8 @@ export interface DeleteSessionSummary {
 export interface AppSettings {
   archiveRoot: string | null
   teamNumber: number | null
+  /** Wireless Control Hub target passed to `adb connect`. */
+  adbAddress: string
   hubDataSource: 'adb' | 'folder'
   hubLogFolder: string | null
   /** Ask before recursively deleting a session that contains files or child folders. */

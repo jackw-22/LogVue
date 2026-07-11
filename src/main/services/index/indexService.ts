@@ -92,9 +92,11 @@ export function queryLogs(root: string | null | undefined, query: SessionQuery):
   })
   // Newest first; rows without any timestamp sink to the end.
   return rows.sort((a, b) => {
-    if (a.recorded && b.recorded) return a.recorded < b.recorded ? 1 : a.recorded > b.recorded ? -1 : 0
-    if (a.recorded) return -1
-    if (b.recorded) return 1
+    const aTime = a.recorded ? Date.parse(a.recorded) : NaN
+    const bTime = b.recorded ? Date.parse(b.recorded) : NaN
+    if (Number.isFinite(aTime) && Number.isFinite(bTime)) return bTime - aTime
+    if (Number.isFinite(aTime)) return -1
+    if (Number.isFinite(bTime)) return 1
     return a.filename.localeCompare(b.filename)
   })
 }

@@ -1,11 +1,13 @@
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { app } from 'electron'
+import { DEFAULT_ADB_ADDRESS } from '@shared/constants/adb'
 import type { AppSettings } from '@shared/types/session'
 
 const DEFAULTS: AppSettings = {
   archiveRoot: null,
   teamNumber: null,
+  adbAddress: DEFAULT_ADB_ADDRESS,
   hubDataSource: 'adb',
   hubLogFolder: null,
   confirmDeletePopulatedSessions: true

@@ -295,10 +295,16 @@ export class IndexStore {
     if (trimmed) {
       params.ftext = `%${trimmed}%`
       textClause =
-        `(s.display_name LIKE @ftext ESCAPE '\\'` +
-        ` OR s.event_code LIKE @ftext ESCAPE '\\'` +
-        ` OR f.filename LIKE @ftext ESCAPE '\\'` +
-        ` OR EXISTS (SELECT 1 FROM session_tags t WHERE t.session_id = s.session_id AND t.tag LIKE @ftext ESCAPE '\\'))`
+        `(f.filename LIKE @ftext ESCAPE '\\'` +
+        ` OR EXISTS (SELECT 1 FROM sessions ancestor WHERE ` +
+        `(s.path = ancestor.path OR ` +
+        `(substr(s.path, 1, length(ancestor.path)) = ancestor.path ` +
+        `AND substr(s.path, length(ancestor.path) + 1, 1) IN ('/', char(92))))` +
+        ` AND (ancestor.display_name LIKE @ftext ESCAPE '\\'` +
+        ` OR ancestor.event_code LIKE @ftext ESCAPE '\\'` +
+        ` OR EXISTS (SELECT 1 FROM session_tags ancestor_tag` +
+        ` WHERE ancestor_tag.session_id = ancestor.session_id` +
+        ` AND ancestor_tag.tag LIKE @ftext ESCAPE '\\'))))`
     }
     return this.db
       .prepare(

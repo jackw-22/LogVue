@@ -18,6 +18,7 @@ export const api = {
     setRoot: (path: string) => window.api.invoke('settings:setArchiveRoot', path),
     setTeamNumber: (teamNumber: number | null) =>
       window.api.invoke('settings:setTeamNumber', teamNumber),
+    setAdbAddress: (address: string) => window.api.invoke('settings:setAdbAddress', address),
     pickHubLogFolder: () => window.api.invoke('settings:pickHubLogFolder'),
     setHubDataSource: (source: 'adb' | 'folder') =>
       window.api.invoke('settings:setHubDataSource', source),
@@ -49,6 +50,7 @@ export const api = {
   },
   adb: {
     status: () => window.api.invoke('adb:status'),
+    connect: () => window.api.invoke('adb:connect'),
     listHubLogs: () => window.api.invoke('adb:listHubLogs'),
     getHubTime: () => window.api.invoke('adb:getHubTime'),
     ignoreHubLog: (entry: HubLogRef) => window.api.invoke('adb:ignoreHubLog', entry),

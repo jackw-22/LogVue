@@ -153,6 +153,18 @@ describe('parseAdbTimezoneOffset', () => {
 })
 
 describe('FakeAdbClient', () => {
+  it('supports the connect surface used by the wireless ADB action', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'logvue-fake-adb-connect-'))
+    try {
+      await expect(new FakeAdbClient(root).connect('192.168.43.1:5555')).resolves.toEqual({
+        connected: true,
+        device: 'Fake Control Hub'
+      })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('lists .rlog files from a local hub folder as remote hub paths', async () => {
     const root = mkdtempSync(join(tmpdir(), 'logvue-fake-adb-'))
     try {

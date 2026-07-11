@@ -62,6 +62,7 @@ export interface IpcApi {
   'settings:pickArchiveRoot': () => Promise<string | null>
   'settings:setArchiveRoot': (path: string) => Promise<AppSettings>
   'settings:setTeamNumber': (teamNumber: number | null) => Promise<AppSettings>
+  'settings:setAdbAddress': (address: string) => Promise<AppSettings>
   'settings:pickHubLogFolder': () => Promise<string | null>
   'settings:setHubDataSource': (source: AppSettings['hubDataSource']) => Promise<AppSettings>
   'settings:setHubLogFolder': (path: string | null) => Promise<AppSettings>
@@ -101,6 +102,8 @@ export interface IpcApi {
   // ── ADB / Control Hub (read-only; spec §7) ─────────────────
   /** Connection status from `adb devices` (spec §7.1). */
   'adb:status': () => Promise<AdbStatus>
+  /** Connect to the configured wireless Control Hub address. */
+  'adb:connect': () => Promise<AdbStatus>
   /** List `.rlog` files on the hub with parsed metadata + import status (spec §7.2–7.3). */
   'adb:listHubLogs': () => Promise<HubLog[]>
   /** Current Control Hub clock sampled over adb, with local-clock offset. */

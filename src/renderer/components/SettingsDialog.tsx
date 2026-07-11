@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react'
 import type { AppSettings } from '@shared/types/session'
 import {
   useClearHubLogFolder,
   usePickArchiveRoot,
   usePickHubLogFolder,
+  useSetAdbAddress,
   useSetConfirmDeletePopulatedSessions,
   useSetHubDataSource
 } from '../api/hooks'
@@ -13,7 +15,9 @@ interface Props {
 }
 
 export default function SettingsDialog({ settings, onClose }: Props): JSX.Element {
+  const [adbAddress, setAdbAddressDraft] = useState(settings.adbAddress)
   const pickLibrary = usePickArchiveRoot()
+  const setAdbAddress = useSetAdbAddress()
   const setHubDataSource = useSetHubDataSource()
   const pickHubLogFolder = usePickHubLogFolder()
   const clearHubLogFolder = useClearHubLogFolder()
@@ -23,7 +27,15 @@ export default function SettingsDialog({ settings, onClose }: Props): JSX.Elemen
     setHubDataSource.isPending ||
     pickHubLogFolder.isPending ||
     clearHubLogFolder.isPending ||
-    setDeleteConfirmation.isPending
+    setDeleteConfirmation.isPending ||
+    setAdbAddress.isPending
+
+  useEffect(() => setAdbAddressDraft(settings.adbAddress), [settings.adbAddress])
+
+  function commitAdbAddress(): void {
+    const trimmed = adbAddress.trim()
+    if (trimmed && trimmed !== settings.adbAddress) setAdbAddress.mutate(trimmed)
+  }
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -66,6 +78,18 @@ export default function SettingsDialog({ settings, onClose }: Props): JSX.Elemen
               Folder Import
             </button>
           </div>
+
+          <label className="field">
+            Wireless ADB address
+            <input
+              value={adbAddress}
+              onChange={(e) => setAdbAddressDraft(e.target.value)}
+              onBlur={commitAdbAddress}
+              placeholder="192.168.43.1:5555"
+              disabled={busy}
+            />
+            <span className="muted small">Used by the Connect action in the status pill.</span>
+          </label>
 
           {settings.hubDataSource === 'folder' && (
             <div className="folder-source-row">

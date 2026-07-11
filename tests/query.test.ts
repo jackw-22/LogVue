@@ -22,9 +22,11 @@ describe('buildSessionQuery', () => {
   it('builds a case-insensitive substring match over name, event, and tags', () => {
     const { where, params } = buildSessionQuery({ text: 'shooter' })
     expect(params.text).toBe('%shooter%')
-    expect(where).toContain('s.display_name LIKE @text')
-    expect(where).toContain('s.event_code LIKE @text')
+    expect(where).toContain('ancestor.display_name LIKE @text')
+    expect(where).toContain('ancestor.event_code LIKE @text')
     expect(where).toContain('session_tags')
+    expect(where).toContain('sessions ancestor')
+    expect(where).toContain('ancestor.path')
   })
 
   it('emits a parametrised IN clause for multi-value facets', () => {

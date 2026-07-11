@@ -5,6 +5,7 @@ import type { AdbStatus } from '@shared/types/hublog'
 import { parseFindOutput, parseLsOutput, remoteBasename } from './parseLs'
 
 const execFileAsync = promisify(execFile)
+const ADB_CONNECT_TIMEOUT_MS = 10_000
 
 /** Thrown when `adb` isn't installed / on PATH (surfaced as a friendly hint in the UI). */
 export class AdbNotFoundError extends Error {
@@ -30,6 +31,7 @@ export interface AdbTimeSample {
 
 export interface AdbLike {
   getStatus(): Promise<AdbStatus>
+  connect(address: string): Promise<AdbStatus>
   listRemoteFiles(): Promise<RemoteFile[]>
   pull(remotePath: string, destPath: string): Promise<void>
   getTimeSample(): Promise<AdbTimeSample>
@@ -78,11 +80,35 @@ export class AdbClient implements AdbLike {
     return this.run(['shell', command])
   }
 
+  /** Connect the shared adb server to a wireless Control Hub target. */
+  async connect(address: string): Promise<AdbStatus> {
+    const target = address.trim()
+    if (!target) throw new Error('Enter an ADB address before connecting')
+
+    let output: string
+    try {
+      output = await this.run(['connect', target], ADB_CONNECT_TIMEOUT_MS)
+    } catch (err) {
+      if (err instanceof AdbNotFoundError) throw err
+      if (wasAdbCommandKilled(err)) {
+        throw new Error(`ADB connection to ${target} timed out after ${ADB_CONNECT_TIMEOUT_MS / 1000} seconds`)
+      }
+      throw new Error(adbErrorDetail(err) || `ADB connection to ${target} failed`)
+    }
+    if (!/connected to|already connected to/i.test(output)) {
+      throw new Error(output.trim() || `ADB did not connect to ${target}`)
+    }
+
+    const status = await this.getStatus(ADB_CONNECT_TIMEOUT_MS)
+    if (!status.connected) throw new Error(`ADB connected to ${target}, but no device was detected`)
+    return status
+  }
+
   /** `adb devices -l` → connection status + a friendly device label (spec §7.1). */
-  async getStatus(): Promise<AdbStatus> {
+  async getStatus(timeout = 15_000): Promise<AdbStatus> {
     let stdout: string
     try {
-      stdout = await this.run(['devices', '-l'])
+      stdout = await this.run(['devices', '-l'], timeout)
     } catch (err) {
       if (err instanceof AdbNotFoundError) return { connected: false, adbMissing: true }
       // A transient adb hiccup (server busy, device settling) — report disconnected,
@@ -156,4 +182,14 @@ export class AdbClient implements AdbLike {
       file_size_bytes: null
     }))
   }
+}
+
+function wasAdbCommandKilled(err: unknown): boolean {
+  const value = err as { code?: string; killed?: boolean; signal?: string }
+  return value.killed === true || value.signal === 'SIGTERM' || value.code === 'ETIMEDOUT'
+}
+
+function adbErrorDetail(err: unknown): string {
+  const value = err as { stderr?: string; stdout?: string; message?: string }
+  return value.stderr?.trim() || value.stdout?.trim() || value.message?.trim() || String(err)
 }

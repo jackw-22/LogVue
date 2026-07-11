@@ -193,6 +193,17 @@ export function useClearHubLogFolder() {
   })
 }
 
+export function useSetAdbAddress() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (address: string) => api.settings.setAdbAddress(address),
+    onSuccess: (settings) => {
+      qc.setQueryData(keys.settings, settings)
+      qc.invalidateQueries({ queryKey: keys.adbStatus })
+    }
+  })
+}
+
 export function useSetConfirmDeletePopulatedSessions() {
   const qc = useQueryClient()
   return useMutation({
@@ -283,6 +294,14 @@ export function useAdbStatus() {
     queryFn: api.adb.status,
     refetchInterval: 4000,
     refetchOnWindowFocus: true
+  })
+}
+
+export function useConnectAdb() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.adb.connect,
+    onSuccess: (status) => qc.setQueryData(keys.adbStatus, status)
   })
 }
 

@@ -227,11 +227,51 @@ input[type="checkbox"] {
   align-items: center;
   gap: 6px;
 }
-.source-switch .status {
-  border-radius: 999px;
-  padding: 0.16rem 0.5rem;
-  font-size: 0.72rem;
-  background: color-mix(in srgb, var(--panel-2) 70%, transparent);
+.source-status {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  padding: 0 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+  opacity: 1;
+}
+.source-status.connectable {
+  color: var(--text);
+  cursor: pointer;
+}
+.source-status.connectable:hover {
+  background: var(--panel-2);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.source-status.ok {
+  color: var(--text);
+}
+.source-status .dot {
+  background: var(--muted);
+}
+.source-status.ok .dot {
+  background: var(--good);
+}
+.source-status.off .dot {
+  background: color-mix(in srgb, var(--warn) 70%, transparent);
+}
+.source-status.connecting .dot {
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  background: transparent;
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  animation: toast-spin 0.8s linear infinite;
 }
 .tabs {
   display: flex;
@@ -1642,7 +1682,8 @@ button.chip.meta.more {
   animation: toast-spin 0.8s linear infinite;
 }
 .spinner-import,
-.spinner-ftcscout {
+.spinner-ftcscout,
+.spinner-adb {
   border-top-color: var(--accent);
 }
 .spinner-reindex {
@@ -1681,7 +1722,8 @@ button.chip.meta.more {
   transition: width 180ms linear;
 }
 .bar-fill-import,
-.bar-fill-ftcscout {
+.bar-fill-ftcscout,
+.bar-fill-adb {
   background: var(--accent);
 }
 .bar-fill-reindex {
@@ -1698,7 +1740,8 @@ button.chip.meta.more {
   background: linear-gradient(90deg, var(--bg), var(--warn), var(--bg));
 }
 .bar-shimmer-import,
-.bar-shimmer-ftcscout {
+.bar-shimmer-ftcscout,
+.bar-shimmer-adb {
   background: linear-gradient(90deg, var(--bg), var(--accent), var(--bg));
 }
 
@@ -1804,7 +1847,6 @@ button.chip.meta.more {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spinner,
   .bar-shimmer,
   .toast {
     animation: none;

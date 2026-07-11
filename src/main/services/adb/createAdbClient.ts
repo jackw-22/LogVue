@@ -17,6 +17,10 @@ class MissingHubLogFolderClient implements AdbLike {
     return { connected: false }
   }
 
+  async connect(_address: string): Promise<AdbStatus> {
+    throw new Error('ADB connect is unavailable while Folder Import is selected')
+  }
+
   async listRemoteFiles(): Promise<RemoteFile[]> {
     return []
   }

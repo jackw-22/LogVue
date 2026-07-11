@@ -65,6 +65,13 @@ const handlers: Handlers = {
     return next
   },
   'settings:setTeamNumber': async (teamNumber) => saveSettings({ teamNumber }),
+  'settings:setAdbAddress': async (address) => {
+    const trimmed = address.trim()
+    if (!trimmed) throw new Error('Enter an ADB address before saving')
+    const next = saveSettings({ adbAddress: trimmed })
+    refreshAdbClient()
+    return next
+  },
   'settings:pickHubLogFolder': async () => {
     const win = BrowserWindow.getFocusedWindow() ?? undefined
     const result = await dialog.showOpenDialog(win!, {
@@ -158,6 +165,29 @@ const handlers: Handlers = {
 
   // ── ADB / Control Hub ──
   'adb:status': async () => adb.getStatus(),
+  'adb:connect': async () => {
+    const address = getSettings().adbAddress
+    const task = startTask({
+      kind: 'adb',
+      title: 'Connecting ADB',
+      subtitle: address,
+      determinate: false
+    })
+    // Let the renderer receive the running snapshot before adb can spend several
+    // seconds waiting for an unreachable wireless target.
+    await new Promise((resolve) => setImmediate(resolve))
+    try {
+      const status = await adb.connect(address)
+      task.succeed(`Connected to ${status.device ?? address}`)
+      return status
+    } catch (err) {
+      task.fail(err)
+      // The task is the user-facing failure surface. Returning a disconnected
+      // status keeps an expected unreachable-device attempt from logging an
+      // additional unhandled IPC stack in the terminal.
+      return { connected: false }
+    }
+  },
   'adb:listHubLogs': async () => listHubLogs(adb, getSettings().archiveRoot),
   'adb:getHubTime': async () => {
     const sample = await adb.getTimeSample()
