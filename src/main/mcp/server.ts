@@ -1,5 +1,7 @@
 import { createServer, type Server as HttpServer } from 'node:http'
-import { relative, resolve } from 'node:path'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join, relative, resolve } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
@@ -10,14 +12,18 @@ import { readMetadata, writeNotes } from '../services/archive/SessionStore'
 import { runSingleImportTask } from '../services/import/importTask'
 import { reindexSession } from '../services/index/indexService'
 import { notifyArchiveChanged } from '../services/watcher/Watcher'
+import { INTERNAL_DIR } from '../services/archive/paths'
 
-export const MCP_HOST = '127.0.0.1'
+export const MCP_HOST = '0.0.0.0'
 export const MCP_PORT = 47831
 export const MCP_PATH = '/mcp'
+export const MCP_DISCOVERY_FILE = 'mcp.json'
 
 let httpServer: HttpServer | null = null
 let mcpServer: McpServer | null = null
 let transport: StreamableHTTPServerTransport | null = null
+let bearerToken: string | null = null
+let discoveryPath: string | null = null
 
 function result(value: unknown) {
   return {
@@ -126,6 +132,7 @@ function createLogVueMcpServer(): McpServer {
 
 export async function startMcpServer(): Promise<void> {
   if (httpServer) return
+  bearerToken = randomBytes(32).toString('base64url')
   mcpServer = createLogVueMcpServer()
   transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
   await mcpServer.connect(transport)
@@ -135,7 +142,7 @@ export async function startMcpServer(): Promise<void> {
       res.writeHead(404).end()
       return
     }
-    if (!isLocalRequest(req.headers.host, req.headers.origin)) {
+    if (!isAuthorizedRequest(req.socket.remoteAddress, req.headers.origin, req.headers.authorization)) {
       res.writeHead(403).end()
       return
     }
@@ -150,21 +157,49 @@ export async function startMcpServer(): Promise<void> {
     httpServer?.once('error', reject)
     httpServer?.listen(MCP_PORT, MCP_HOST, () => resolveReady())
   })
-  console.info(`LogVue MCP server listening at http://${MCP_HOST}:${MCP_PORT}${MCP_PATH}`)
+  writeDiscoveryFile(bearerToken)
+  console.info(`LogVue MCP server listening on port ${MCP_PORT} (loopback + authenticated WSL access)`)
 }
 
-function isLocalRequest(hostHeader: string | undefined, originHeader: string | undefined): boolean {
-  const allowed = new Set(['127.0.0.1', 'localhost', '[::1]'])
+function isAuthorizedRequest(
+  remoteAddress: string | undefined,
+  originHeader: string | undefined,
+  authorizationHeader: string | undefined
+): boolean {
+  const loopback = remoteAddress === '127.0.0.1' || remoteAddress === '::1' || remoteAddress === '::ffff:127.0.0.1'
+  if (loopback) return !originHeader || isLoopbackHostname(originHeader)
+  if (originHeader || !bearerToken) return false
+  const supplied = authorizationHeader?.match(/^Bearer (.+)$/i)?.[1]
+  if (!supplied) return false
+  const actual = Buffer.from(bearerToken)
+  const candidate = Buffer.from(supplied)
+  return actual.length === candidate.length && timingSafeEqual(actual, candidate)
+}
+
+function isLoopbackHostname(url: string): boolean {
   try {
-    const host = new URL(`http://${hostHeader ?? ''}`).hostname
-    if (!allowed.has(host)) return false
-    return !originHeader || allowed.has(new URL(originHeader).hostname)
+    return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(url).hostname)
   } catch {
     return false
   }
 }
 
+function writeDiscoveryFile(token: string): void {
+  const root = getSettings().archiveRoot
+  if (!root) return
+  const internalDir = join(root, INTERNAL_DIR)
+  mkdirSync(internalDir, { recursive: true })
+  discoveryPath = join(internalDir, MCP_DISCOVERY_FILE)
+  writeFileSync(
+    discoveryPath,
+    JSON.stringify({ version: 1, port: MCP_PORT, path: MCP_PATH, token, pid: process.pid }, null, 2) + '\n',
+    { encoding: 'utf8', mode: 0o600 }
+  )
+}
+
 export async function stopMcpServer(): Promise<void> {
+  if (discoveryPath) rmSync(discoveryPath, { force: true })
+  discoveryPath = null
   const currentHttp = httpServer
   httpServer = null
   await new Promise<void>((resolveClosed) => {
@@ -174,4 +209,5 @@ export async function stopMcpServer(): Promise<void> {
   await mcpServer?.close()
   mcpServer = null
   transport = null
+  bearerToken = null
 }
