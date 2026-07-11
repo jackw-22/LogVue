@@ -30,3 +30,8 @@ The configuration remains stable across LogVue updates, library changes, and WSL
 - `import_hub_log`: imports one listed remote log into an existing archive session.
 
 Reading, navigation, grep, notes and metadata editing, and bulk analysis remain filesystem-native. LogVue's archive watcher refreshes the index and renderer after direct file edits. MCP is intentionally limited to LogVue-owned imports and live Control Hub access.
+
+## Testing
+
+For an agent-driven smoke test and optional end-to-end test, see
+[`doc/mcp-agent-test.md`](doc/mcp-agent-test.md).
