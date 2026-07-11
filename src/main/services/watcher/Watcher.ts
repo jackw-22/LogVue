@@ -75,8 +75,13 @@ function flush(state: WatcherState): void {
   } catch (err) {
     console.error('Archive watcher rebuild failed:', err)
   }
-  const payload: ArchiveChangedEvent = { root: state.root, paths, reason: 'archive_changed' }
+  notifyArchiveChanged(state.root, paths)
+}
+
+/** Immediately tell renderers about a service-owned archive mutation. */
+export function notifyArchiveChanged(root: string, paths: string[]): void {
+  const payload: ArchiveChangedEvent = { root, paths, reason: 'archive_changed' }
   for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send('archive:changed', payload)
+    if (!win.isDestroyed()) win.webContents.send('archive:changed', payload)
   }
 }

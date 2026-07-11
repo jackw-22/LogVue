@@ -4,6 +4,7 @@ import { registerIpcHandlers } from './ipc/registry'
 import { getSettings } from './config/settings'
 import { closeIndex, ensureIndexBuilt } from './services/index/indexService'
 import { startArchiveWatcher, stopArchiveWatcher } from './services/watcher/Watcher'
+import { startMcpServer, stopMcpServer } from './mcp/server'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -56,6 +57,9 @@ app.whenReady().then(() => {
     console.error('Index build on startup failed (will run without index):', err)
   }
   createWindow()
+  void startMcpServer().catch((err) => {
+    console.error('MCP server failed to start (LogVue will continue without it):', err)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -67,6 +71,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('will-quit', () => {
+  void stopMcpServer()
   stopArchiveWatcher()
   closeIndex()
 })

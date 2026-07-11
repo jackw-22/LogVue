@@ -13,21 +13,15 @@ import {
   rebuild,
   reindexSession
 } from '../services/index/indexService'
-import { createAdbClient } from '../services/adb/createAdbClient'
 import { listHubLogs } from '../services/adb/hublogs'
+import { getAdbClient, refreshAdbClient } from '../services/adb/runtime'
 import { FtcScoutClient } from '../services/ftcscout/FtcScoutClient'
 import { syncFtcScoutEvent } from '../services/ftcscout/syncEvent'
 import { startArchiveWatcher } from '../services/watcher/Watcher'
 import { listTasks, startTask } from '../services/tasks/TaskService'
 import { runImportTask, runNewSessionImportTask, runSingleImportTask } from '../services/import/importTask'
 
-/** One hub-log source wrapper for the app's lifetime; refreshed when source settings change. */
-let adb = createAdbClient(getSettings())
 const ftcScout = new FtcScoutClient()
-
-function refreshAdbClient() {
-  adb = createAdbClient(getSettings())
-}
 
 /** Every channel in the contract must have exactly one handler here. */
 type Handlers = {
@@ -164,7 +158,7 @@ const handlers: Handlers = {
   'index:librarySize': async () => librarySizeBytes(getSettings().archiveRoot),
 
   // ── ADB / Control Hub ──
-  'adb:status': async () => adb.getStatus(),
+  'adb:status': async () => getAdbClient().getStatus(),
   'adb:connect': async () => {
     const address = getSettings().adbAddress
     const task = startTask({
@@ -177,7 +171,7 @@ const handlers: Handlers = {
     // seconds waiting for an unreachable wireless target.
     await new Promise((resolve) => setImmediate(resolve))
     try {
-      const status = await adb.connect(address)
+      const status = await getAdbClient().connect(address)
       task.succeed(`Connected to ${status.device ?? address}`)
       return status
     } catch (err) {
@@ -188,9 +182,9 @@ const handlers: Handlers = {
       return { connected: false }
     }
   },
-  'adb:listHubLogs': async () => listHubLogs(adb, getSettings().archiveRoot),
+  'adb:listHubLogs': async () => listHubLogs(getAdbClient(), getSettings().archiveRoot),
   'adb:getHubTime': async () => {
-    const sample = await adb.getTimeSample()
+    const sample = await getAdbClient().getTimeSample()
     const localMidpointMs = sample.localBeforeMs + (sample.localAfterMs - sample.localBeforeMs) / 2
     return {
       ...sample,
@@ -208,9 +202,9 @@ const handlers: Handlers = {
   // ── import ──
   // Single-file imports use the same activity task as batch imports, so quick imports
   // and suggested-log imports have visible progress too.
-  'import:toSession': async (req) => runSingleImportTask(adb, getSettings().archiveRoot, req),
-  'import:batchToSession': async (req) => runImportTask(adb, getSettings().archiveRoot, req),
-  'import:toNewSession': async (req) => runNewSessionImportTask(adb, getSettings().archiveRoot, req),
+  'import:toSession': async (req) => runSingleImportTask(getAdbClient(), getSettings().archiveRoot, req),
+  'import:batchToSession': async (req) => runImportTask(getAdbClient(), getSettings().archiveRoot, req),
+  'import:toNewSession': async (req) => runNewSessionImportTask(getAdbClient(), getSettings().archiveRoot, req),
 
   // ── background tasks ──
   'tasks:list': async () => listTasks(),
