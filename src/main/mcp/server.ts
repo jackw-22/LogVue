@@ -1,18 +1,25 @@
-import { createServer, type Server as HttpServer } from 'node:http'
+import {
+  createServer,
+  type IncomingMessage,
+  type Server as HttpServer,
+  type ServerResponse
+} from 'node:http'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { join, relative, resolve } from 'node:path'
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
 import { getSettings } from '../config/settings'
 import { listHubLogs } from '../services/adb/hublogs'
 import { getAdbClient } from '../services/adb/runtime'
-import { readMetadata, writeNotes } from '../services/archive/SessionStore'
+import { createSession } from '../services/archive/ArchiveService'
+import { readMetadata } from '../services/archive/SessionStore'
 import { runSingleImportTask } from '../services/import/importTask'
 import { reindexSession } from '../services/index/indexService'
 import { notifyArchiveChanged } from '../services/watcher/Watcher'
 import { INTERNAL_DIR } from '../services/archive/paths'
+import { SESSION_TYPES } from '@shared/constants/sessionTypes'
 
 export const MCP_HOST = '0.0.0.0'
 export const MCP_PORT = 47831
@@ -20,8 +27,6 @@ export const MCP_PATH = '/mcp'
 export const MCP_DISCOVERY_FILE = 'mcp.json'
 
 let httpServer: HttpServer | null = null
-let mcpServer: McpServer | null = null
-let transport: StreamableHTTPServerTransport | null = null
 let bearerToken: string | null = null
 let discoveryPath: string | null = null
 
@@ -32,17 +37,25 @@ function result(value: unknown) {
   }
 }
 
-function archiveSessionPath(input: string): { root: string; sessionPath: string } {
+function archivePath(input: string | undefined, requireSession: boolean): { root: string; path: string } {
   const configuredRoot = getSettings().archiveRoot
   if (!configuredRoot) throw new Error('No LogVue archive root is configured')
   const root = resolve(configuredRoot)
-  const sessionPath = resolve(input)
-  const fromRoot = relative(root, sessionPath)
-  if (!fromRoot || fromRoot.startsWith('..') || resolve(root, fromRoot) !== sessionPath) {
-    throw new Error('sessionPath must identify a session below the configured archive root')
+  const normalized = normalizeAgentPath(input?.trim() || '.')
+  const path = normalized === '.' ? root : resolve(isAbsolute(normalized) ? normalized : join(root, normalized))
+  const fromRoot = relative(root, path)
+  if (fromRoot.startsWith('..') || resolve(root, fromRoot) !== path) {
+    throw new Error('Path must identify a folder within the configured archive root')
   }
-  if (!readMetadata(sessionPath)) throw new Error(`No session.json found at ${sessionPath}`)
-  return { root, sessionPath }
+  if (!existsSync(path) || !statSync(path).isDirectory()) throw new Error(`Archive folder does not exist: ${path}`)
+  if (requireSession && (!fromRoot || !readMetadata(path))) throw new Error(`No session.json found at ${path}`)
+  return { root, path }
+}
+
+/** Accept the /mnt/c/... spelling commonly supplied by WSL agents to the Windows app. */
+function normalizeAgentPath(input: string): string {
+  const wsl = /^\/mnt\/([a-zA-Z])(?:\/(.*))?$/.exec(input.replace(/\\/g, '/'))
+  return wsl ? `${wsl[1].toUpperCase()}:\\${(wsl[2] ?? '').replace(/\//g, '\\')}` : input
 }
 
 function createLogVueMcpServer(): McpServer {
@@ -50,7 +63,7 @@ function createLogVueMcpServer(): McpServer {
     { name: 'logvue', version: '0.1.0' },
     {
       instructions:
-        'Use these tools for LogVue mutations and Control Hub access. Read and search archive files directly when filesystem access is available.'
+        'Use these tools only for live Control Hub access and LogVue-managed imports. Read, search, and edit archive files such as session.json and notes.md directly through the filesystem; LogVue watches the archive and refreshes its UI automatically.'
     }
   )
 
@@ -69,13 +82,37 @@ function createLogVueMcpServer(): McpServer {
     'list_hub_logs',
     {
       title: 'List Control Hub logs',
-      description: 'List RLOG files currently available from the configured Control Hub.',
-      inputSchema: z.object({}),
+      description: 'List the newest RLOG files available from the configured Control Hub or folder source.',
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(100).default(20).describe('Maximum logs to return, newest first')
+      }),
       annotations: { readOnlyHint: true }
     },
-    async () => {
+    async ({ limit }) => {
       const root = getSettings().archiveRoot
-      return result({ logs: await listHubLogs(getAdbClient(), root) })
+      const logs = await listHubLogs(getAdbClient(), root)
+      return result({ logs: logs.slice(0, limit), returned: Math.min(logs.length, limit), total: logs.length })
+    }
+  )
+
+  server.registerTool(
+    'create_session',
+    {
+      title: 'Create an archive session',
+      description:
+        'Create a schema-valid session folder through LogVue. parentPath may be archive-relative, Windows absolute, or a WSL /mnt/<drive>/... path; omit it to create at the archive root.',
+      inputSchema: z.object({
+        parentPath: z.string().optional().describe('Parent folder; defaults to the configured archive root'),
+        displayName: z.string().trim().min(1).describe('Human-readable session name'),
+        sessionType: z.enum(SESSION_TYPES).default('general_session').describe('LogVue session type')
+      })
+    },
+    async ({ parentPath, displayName, sessionType }) => {
+      const { root, path: resolvedParent } = archivePath(parentPath, false)
+      const session = createSession({ parentPath: resolvedParent, displayName, sessionType })
+      reindexSession(root, session.path)
+      notifyArchiveChanged(root, [session.path])
+      return result({ session, archiveRelativePath: relative(root, session.path) })
     }
   )
 
@@ -87,12 +124,15 @@ function createLogVueMcpServer(): McpServer {
         'Pull one available Control Hub RLOG into an existing session. The import appears in LogVue Activity and updates the index.',
       inputSchema: z.object({
         remotePath: z.string().min(1).describe('Exact remote_path returned by list_hub_logs'),
-        sessionPath: z.string().min(1).describe('Absolute path to an existing archive session'),
+        sessionPath: z
+          .string()
+          .min(1)
+          .describe('Existing session as an archive-relative, Windows absolute, or WSL /mnt/<drive>/... path'),
         force: z.boolean().optional().describe('Import another copy when LogVue detects a duplicate')
       })
     },
     async ({ remotePath, sessionPath: inputPath, force }) => {
-      const { root, sessionPath } = archiveSessionPath(inputPath)
+      const { root, path: sessionPath } = archivePath(inputPath, true)
       const remote = (await listHubLogs(getAdbClient(), root)).find((log) => log.remote_path === remotePath)
       if (!remote) throw new Error(`Control Hub log is no longer available: ${remotePath}`)
       const imported = await runSingleImportTask(getAdbClient(), root, {
@@ -107,35 +147,12 @@ function createLogVueMcpServer(): McpServer {
     }
   )
 
-  server.registerTool(
-    'write_session_notes',
-    {
-      title: 'Write session notes',
-      description:
-        'Replace notes.md for an existing session and immediately synchronize the LogVue index and renderer.',
-      inputSchema: z.object({
-        sessionPath: z.string().min(1).describe('Absolute path to an existing archive session'),
-        markdown: z.string().describe('Complete replacement Markdown for notes.md')
-      })
-    },
-    async ({ sessionPath: inputPath, markdown }) => {
-      const { root, sessionPath } = archiveSessionPath(inputPath)
-      writeNotes(sessionPath, markdown)
-      reindexSession(root, sessionPath)
-      notifyArchiveChanged(root, [sessionPath])
-      return result({ sessionPath, bytesWritten: Buffer.byteLength(markdown, 'utf8') })
-    }
-  )
-
   return server
 }
 
 export async function startMcpServer(): Promise<void> {
   if (httpServer) return
   bearerToken = randomBytes(32).toString('base64url')
-  mcpServer = createLogVueMcpServer()
-  transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
-  await mcpServer.connect(transport)
 
   httpServer = createServer((req, res) => {
     if (req.url !== MCP_PATH) {
@@ -146,11 +163,12 @@ export async function startMcpServer(): Promise<void> {
       res.writeHead(403).end()
       return
     }
-    void transport?.handleRequest(req, res).catch((error: unknown) => {
-      console.error('LogVue MCP request failed:', error)
-      if (!res.headersSent) res.writeHead(500)
-      res.end()
-    })
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null }))
+      return
+    }
+    void handleMcpRequest(req, res)
   })
 
   await new Promise<void>((resolveReady, reject) => {
@@ -159,6 +177,27 @@ export async function startMcpServer(): Promise<void> {
   })
   writeDiscoveryFile(bearerToken)
   console.info(`LogVue MCP server listening on port ${MCP_PORT} (loopback + authenticated WSL access)`)
+}
+
+async function handleMcpRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const server = createLogVueMcpServer()
+  const requestTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
+  let closed = false
+  const close = async () => {
+    if (closed) return
+    closed = true
+    await requestTransport.close()
+    await server.close()
+  }
+  res.once('close', () => void close())
+  try {
+    await server.connect(requestTransport)
+    await requestTransport.handleRequest(req, res)
+  } catch (error) {
+    console.error('LogVue MCP request failed:', error)
+    if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' })
+    res.end()
+  }
 }
 
 function isAuthorizedRequest(
@@ -206,8 +245,5 @@ export async function stopMcpServer(): Promise<void> {
     if (!currentHttp) return resolveClosed()
     currentHttp.close(() => resolveClosed())
   })
-  await mcpServer?.close()
-  mcpServer = null
-  transport = null
   bearerToken = null
 }

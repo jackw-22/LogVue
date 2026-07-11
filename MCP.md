@@ -21,8 +21,8 @@ The bridge first tries loopback. If that is unavailable, it discovers the curren
 ## Tools
 
 - `get_status`: configured archive and ADB status.
-- `list_hub_logs`: RLOG files available from the configured Control Hub.
+- `list_hub_logs`: newest RLOG files available from the configured Control Hub or folder source (20 by default, up to 100).
+- `create_session`: creates a schema-valid session at the archive root or beneath an existing folder.
 - `import_hub_log`: imports one listed remote log into an existing archive session.
-- `write_session_notes`: replaces a session's `notes.md`, reindexes it, and refreshes the renderer.
 
-Reading, navigation, grep, and bulk analysis remain filesystem-native. MCP is intentionally limited to LogVue-owned actions and live Control Hub access.
+Reading, navigation, grep, notes and metadata editing, and bulk analysis remain filesystem-native. LogVue's archive watcher refreshes the index and renderer after direct file edits. MCP is intentionally limited to LogVue-owned imports and live Control Hub access.
