@@ -39,6 +39,7 @@ describe('collectIndexRows', () => {
         { filename: 'AutoOpMode_log_1.rlog', kind: 'auto_log', source: 'control_hub', imported_at: '2026-07-04T10:00:00Z', file_size_bytes: 2048 }
       ]
     })
+    writeFileSync(join(match, 'AutoOpMode_log_1.rlog'), 'log')
 
     const { sessions, files } = collectIndexRows(root)
 
@@ -100,6 +101,22 @@ describe('collectIndexRows', () => {
       file_size_bytes: 3,
       remote_path: null
     })
+  })
+
+  it('does not index tracked files that no longer exist on disk', () => {
+    const dir = join(root, 'General')
+    writeSession(dir, {
+      session_id: 'general-1',
+      session_type: 'general_session',
+      display_name: 'General',
+      files: [
+        { filename: 'Present_log.rlog', kind: 'auto_log', source: 'control_hub' },
+        { filename: 'Deleted_log.rlog', kind: 'teleop_log', source: 'control_hub' }
+      ]
+    })
+    writeFileSync(join(dir, 'Present_log.rlog'), 'log')
+
+    expect(collectIndexRows(root).files.map((file) => file.filename)).toEqual(['Present_log.rlog'])
   })
 
   it('projects deduped, trimmed tags into (session, tag) rows', () => {

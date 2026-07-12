@@ -90,7 +90,7 @@ export function toFileRows(sessionId: string, m: SessionMetadata): FileRow[] {
  */
 export function collectFileRows(dir: string, m: SessionMetadata): FileRow[] {
   const rowsByName = new Map(toFileRows(m.session_id, m).map((row) => [row.filename, row]))
-  if (!existsSync(dir)) return [...rowsByName.values()]
+  if (!existsSync(dir)) return []
 
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isFile()) continue

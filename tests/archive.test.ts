@@ -105,6 +105,27 @@ describe('listFolderFiles', () => {
   it('returns [] for a missing folder', () => {
     expect(listFolderFiles(join(root, 'nope'))).toEqual([])
   })
+
+  it('drops session.json entries whose files were deleted from disk', () => {
+    const dir = join(root, 'Q4_Blue_B2')
+    writeSession(dir, {
+      session_id: 'q4',
+      session_type: 'official_match',
+      display_name: 'Q4',
+      files: [
+        { filename: 'Present_log.rlog', kind: 'auto_log', source: 'control_hub' },
+        { filename: 'Deleted_log.rlog', kind: 'teleop_log', source: 'control_hub' }
+      ]
+    })
+    writeFileSync(join(dir, 'Present_log.rlog'), 'log')
+
+    const session = getSession(dir)
+
+    expect(session.metadata.files.map((file) => file.filename)).toEqual(['Present_log.rlog'])
+    expect(scanTree(root)[0].logCount).toBe(1)
+    // Passive reconciliation must not silently rewrite user-owned sidecars.
+    expect(JSON.parse(readFileSync(join(dir, 'session.json'), 'utf-8')).files).toHaveLength(2)
+  })
 })
 
 describe('createSession', () => {
