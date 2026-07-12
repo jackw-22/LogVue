@@ -24,7 +24,7 @@ async function main(): Promise<void> {
     throw new Error(`LogVue MCP connection details were not found at ${discoveryPath}. Start LogVue and try again.`)
   }
   const discovery = Discovery.parse(JSON.parse(readFileSync(discoveryPath, 'utf8')))
-  const host = (await portIsOpen('127.0.0.1', discovery.port)) ? '127.0.0.1' : windowsHostFromDefaultRoute()
+  const host = await findLogVueHost(discovery.port)
   const url = new URL(`http://${host}:${discovery.port}${discovery.path}`)
 
   const stdio = new StdioServerTransport()
@@ -45,6 +45,15 @@ async function main(): Promise<void> {
   await http.start()
   await stdio.start()
   console.error(`LogVue MCP bridge connected to ${url.href}`)
+}
+
+async function findLogVueHost(port: number): Promise<string> {
+  if (await portIsOpen('127.0.0.1', port)) return '127.0.0.1'
+
+  const windowsHost = windowsHostFromDefaultRoute()
+  if (await portIsOpen(windowsHost, port)) return windowsHost
+
+  throw new Error('LogVue is not running or its MCP endpoint is unavailable; start LogVue and try again')
 }
 
 function setNegotiatedProtocolVersion(transport: StreamableHTTPClientTransport, message: JSONRPCMessage): void {
