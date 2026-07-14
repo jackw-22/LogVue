@@ -53,7 +53,7 @@ describe('collectIndexRows', () => {
 
     expect(files).toHaveLength(1)
     expect(files[0]).toMatchObject({
-      session_id: 'm-1',
+      session_path: match,
       filename: 'AutoOpMode_log_1.rlog',
       kind: 'auto_log',
       file_size_bytes: 2048
@@ -73,13 +73,45 @@ describe('collectIndexRows', () => {
     expect(s.team_number).toBe(98765)
   })
 
-  it('indexes bare folders with discovery defaults (rebuildable ids)', () => {
+  it('indexes bare folders with discovery defaults keyed by path (no minted id)', () => {
     mkdirSync(join(root, 'Random_Folder'), { recursive: true })
     const rows = collectIndexRows(root).sessions
     const bare = rows.find((s) => s.path.endsWith('Random_Folder'))!
     expect(bare.display_name).toBe('Random_Folder')
     expect(bare.session_type).toBe('general_session')
-    expect(bare.session_id).toBeTruthy() // generated, disposable
+    // Reads never mint ids: rescanning a bare folder must be idempotent.
+    expect(bare.session_id).toBeNull()
+  })
+
+  it('keeps both sessions when a folder was copied (duplicate session_id)', () => {
+    const meta = { session_id: 'dup-1', session_type: 'official_match', display_name: 'Q4' }
+    writeSession(join(root, 'Q4'), meta)
+    writeSession(join(root, 'Q4 - Copy'), meta)
+    const rows = collectIndexRows(root).sessions
+    expect(rows.filter((s) => s.session_id === 'dup-1')).toHaveLength(2)
+    expect(new Set(rows.map((s) => s.path)).size).toBe(2)
+  })
+
+  it('degrades a corrupt session.json to bare-folder defaults instead of failing the walk', () => {
+    const dir = join(root, 'Broken')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'session.json'), '{ this is not json')
+    writeSession(join(root, 'Fine'), { session_id: 'ok-1', display_name: 'Fine' })
+
+    const rows = collectIndexRows(root).sessions
+    const broken = rows.find((s) => s.path === dir)!
+    expect(broken.display_name).toBe('Broken')
+    expect(broken.session_id).toBeNull()
+    expect(rows.some((s) => s.session_id === 'ok-1')).toBe(true)
+  })
+
+  it('degrades a non-object session.json (valid JSON, wrong shape) the same way', () => {
+    const dir = join(root, 'ArrayJson')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'session.json'), '["not", "an", "object"]')
+
+    const rows = collectIndexRows(root).sessions
+    expect(rows.find((s) => s.path === dir)!.display_name).toBe('ArrayJson')
   })
 
   it('indexes loose files physically present in session folders', () => {
@@ -95,12 +127,21 @@ describe('collectIndexRows', () => {
 
     expect(files).toHaveLength(1)
     expect(files[0]).toMatchObject({
-      session_id: 'general-1',
+      session_path: dir,
       filename: 'TeleOp_log_1.rlog',
       kind: 'teleop_log',
       file_size_bytes: 3,
       remote_path: null
     })
+  })
+
+  it('does not index transient artifacts left by interrupted writes', () => {
+    const dir = join(root, 'General')
+    writeSession(dir, { session_id: 'g-1', display_name: 'General' })
+    writeFileSync(join(dir, 'Real_log.rlog'), 'log')
+    writeFileSync(join(dir, 'session.json.4242.tmp'), '{ half-written')
+
+    expect(collectIndexRows(root).files.map((f) => f.filename)).toEqual(['Real_log.rlog'])
   })
 
   it('does not index tracked files that no longer exist on disk', () => {
@@ -120,13 +161,14 @@ describe('collectIndexRows', () => {
   })
 
   it('projects deduped, trimmed tags into (session, tag) rows', () => {
-    writeSession(join(root, 'Tuning'), {
+    const dir = join(root, 'Tuning')
+    writeSession(dir, {
       session_id: 'tag-1',
       session_type: 'tuning_session',
       display_name: 'Shooter tuning',
       tags: ['shooter', ' shooter ', 'vision', '  ']
     })
-    const tags = collectIndexRows(root).tags.filter((t) => t.session_id === 'tag-1')
+    const tags = collectIndexRows(root).tags.filter((t) => t.session_path === dir)
     expect(tags.map((t) => t.tag).sort()).toEqual(['shooter', 'vision'])
   })
 

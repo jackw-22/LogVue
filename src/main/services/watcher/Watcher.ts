@@ -4,7 +4,7 @@ import chokidar from 'chokidar'
 import type { FSWatcher } from 'chokidar'
 import type { ArchiveChangedEvent } from '@shared/types/ipc'
 import { rebuild } from '../index/indexService'
-import { INDEX_FILE, INTERNAL_DIR } from '../archive/paths'
+import { INDEX_FILE, INTERNAL_DIR, isTransientArtifact } from '../archive/paths'
 
 const DEBOUNCE_MS = 400
 
@@ -51,7 +51,7 @@ export function shouldIgnoreArchivePath(path: string): boolean {
   const name = basename(path)
   if (!name) return false
   if (name === INDEX_FILE || name === `${INDEX_FILE}-wal` || name === `${INDEX_FILE}-shm`) return true
-  if (name.endsWith('.tmp') || name.endsWith('~')) return true
+  if (isTransientArtifact(name)) return true
   return false
 }
 

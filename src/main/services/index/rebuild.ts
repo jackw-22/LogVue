@@ -1,7 +1,7 @@
 import { join } from 'path'
 import { existsSync, readdirSync, statSync } from 'fs'
 import type { SessionMetadata } from '@shared/types/session'
-import { INDEX_FILE, NOTES_FILE, RESERVED_NAMES } from '../archive/paths'
+import { INDEX_FILE, isTransientArtifact, NOTES_FILE, RESERVED_NAMES } from '../archive/paths'
 import { readMetadataOrDefault } from '../archive/SessionStore'
 import { guessFileKind } from '../import/fileKind'
 import { extractRlogMetadata } from '../rlog/rlogMetadata'
@@ -9,8 +9,10 @@ import type { IndexStore } from './IndexStore'
 
 /** One row of the `sessions` table — a flattened, queryable projection of `session.json`. */
 export interface SessionRow {
-  session_id: string
+  /** Identity: where the folder lives. */
   path: string
+  /** Carried as data only — null for bare folders, possibly duplicated by copies. */
+  session_id: string | null
   session_type: string
   display_name: string
   event_code: string | null
@@ -23,7 +25,7 @@ export interface SessionRow {
 
 /** One row of the `files` table — a session's imported files, for "has kind"/"missing kind" filters. */
 export interface FileRow {
-  session_id: string
+  session_path: string
   filename: string
   kind: string
   remote_path: string | null
@@ -35,13 +37,13 @@ export interface FileRow {
 
 /** One row of the `session_tags` table — a (session, tag) membership for "tagged X" filters. */
 export interface TagRow {
-  session_id: string
+  session_path: string
   tag: string
 }
 
 /** One row of the `file_metadata` table — a metadata entry decoded from an .rlog's head. */
 export interface FileMetadataRow {
-  session_id: string
+  session_path: string
   filename: string
   key: string
   value: string
@@ -57,8 +59,8 @@ export interface IndexRows {
 /** Flatten a session's metadata into the row the `sessions` table stores. */
 export function toSessionRow(path: string, m: SessionMetadata): SessionRow {
   return {
-    session_id: m.session_id,
     path,
+    session_id: m.session_id ?? null,
     session_type: m.session_type,
     display_name: m.display_name,
     event_code: m.event?.display_code ?? m.event?.ftcscout_code ?? null,
@@ -70,9 +72,9 @@ export function toSessionRow(path: string, m: SessionMetadata): SessionRow {
   }
 }
 
-export function toFileRows(sessionId: string, m: SessionMetadata): FileRow[] {
+export function toFileRows(sessionPath: string, m: SessionMetadata): FileRow[] {
   return m.files.map((f) => ({
-    session_id: sessionId,
+    session_path: sessionPath,
     filename: f.filename,
     kind: f.kind,
     remote_path: f.remote_path ?? null,
@@ -89,13 +91,14 @@ export function toFileRows(sessionId: string, m: SessionMetadata): FileRow[] {
  * copied-in logs show up in search/results before being formally imported.
  */
 export function collectFileRows(dir: string, m: SessionMetadata): FileRow[] {
-  const rowsByName = new Map(toFileRows(m.session_id, m).map((row) => [row.filename, row]))
+  const rowsByName = new Map(toFileRows(dir, m).map((row) => [row.filename, row]))
   if (!existsSync(dir)) return []
 
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isFile()) continue
     const name = entry.name
     if (RESERVED_NAMES.has(name) || name === NOTES_FILE || name === INDEX_FILE) continue
+    if (isTransientArtifact(name)) continue
     if (rowsByName.has(name)) continue
 
     let fileSize: number | null = null
@@ -105,7 +108,7 @@ export function collectFileRows(dir: string, m: SessionMetadata): FileRow[] {
       fileSize = null
     }
     rowsByName.set(name, {
-      session_id: m.session_id,
+      session_path: dir,
       filename: name,
       kind: guessFileKind(name),
       remote_path: null,
@@ -130,21 +133,21 @@ export function collectFileMetadataRows(dir: string, files: FileRow[]): FileMeta
     const meta = extractRlogMetadata(join(dir, f.filename))
     if (!meta) continue
     for (const [key, value] of Object.entries(meta)) {
-      out.push({ session_id: f.session_id, filename: f.filename, key, value })
+      out.push({ session_path: f.session_path, filename: f.filename, key, value })
     }
   }
   return out
 }
 
 /** Deduped, blank-stripped (session, tag) rows for the tags table. */
-export function toTagRows(sessionId: string, m: SessionMetadata): TagRow[] {
+export function toTagRows(sessionPath: string, m: SessionMetadata): TagRow[] {
   const seen = new Set<string>()
   const rows: TagRow[] = []
   for (const raw of m.tags ?? []) {
     const tag = raw.trim()
     if (!tag || seen.has(tag)) continue
     seen.add(tag)
-    rows.push({ session_id: sessionId, tag })
+    rows.push({ session_path: sessionPath, tag })
   }
   return rows
 }
@@ -154,7 +157,7 @@ function walk(dir: string, out: IndexRows): void {
   const files = collectFileRows(dir, metadata)
   out.sessions.push(toSessionRow(dir, metadata))
   out.files.push(...files)
-  out.tags.push(...toTagRows(metadata.session_id, metadata))
+  out.tags.push(...toTagRows(dir, metadata))
   out.fileMeta.push(...collectFileMetadataRows(dir, files))
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory() && !RESERVED_NAMES.has(entry.name)) walk(join(dir, entry.name), out)

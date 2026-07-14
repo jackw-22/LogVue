@@ -1,6 +1,7 @@
 import { join } from 'path'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { app } from 'electron'
+import { writeFileAtomic } from '../lib/atomicWrite'
 import { DEFAULT_ADB_ADDRESS } from '@shared/constants/adb'
 import type { AppSettings } from '@shared/types/session'
 
@@ -31,6 +32,6 @@ export function getSettings(): AppSettings {
 
 export function saveSettings(patch: Partial<AppSettings>): AppSettings {
   const next = { ...getSettings(), ...patch }
-  writeFileSync(settingsPath(), JSON.stringify(next, null, 2) + '\n', 'utf-8')
+  writeFileAtomic(settingsPath(), JSON.stringify(next, null, 2) + '\n')
   return next
 }

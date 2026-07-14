@@ -158,6 +158,18 @@ renderer (to render). The IPC contract in `shared/types/ipc.ts` is the seam.
 TypeScript in `shared/types/`, validated at the fs boundary with **zod**
 (`shared/schema/sessionJson.ts`) so a hand-edited or older `session.json` never
 crashes the app — it migrates or falls back to discovery defaults (spec §4.2).
+A file that won't even parse (corrupt JSON, non-object, half-written) is a
+distinct state from "no session.json" (`probeMetadata`: missing | invalid |
+valid): both display as a bare folder, but invalid is flagged
+(`metadataInvalid`) with a warning in the UI, and if the app ever writes
+metadata to that folder it first preserves the unreadable file as
+`session.json.bak` (unique-suffixed). Reads never mutate or destroy it, and one
+bad file never fails the tree scan or index rebuild. All app-owned sidecar
+writes (`session.json`, `notes.md`, settings) go through a temp-file + rename
+(`main/lib/atomicWrite.ts`) that preserves the target's permission bits and
+cleans up stale temps from interrupted writes; `.tmp`/`~` artifacts are excluded
+from listings, indexing, and watching by one shared predicate
+(`paths.isTransientArtifact`).
 
 ```ts
 type SessionType =
@@ -167,7 +179,7 @@ type SessionType =
 
 interface SessionMetadata {
   schema_version: number;          // 1; migrations keyed off this
-  session_id: string;              // stable id (uuid or slug)
+  session_id?: string;             // minted on first write; reads never generate ids
   session_type: SessionType;
   display_name: string;            // seeded from folder name on discovery
   created_at: string; updated_at: string;
@@ -370,16 +382,26 @@ empty `Q4_Blue_B2/` is already a valid, importable session before a single log e
 ## 8. Index schema (rebuildable — `index/schema.ts`)
 
 ```sql
-sessions(session_id PK, path, session_type, display_name, event_code,
+sessions(path PK, session_id, session_type, display_name, event_code,
          team_number, alliance, session_start, sort_key, updated_at);
-files(id PK, session_id FK, filename, kind, remote_path, original_filename,
+files(id PK, session_path FK, filename, kind, remote_path, original_filename,
       file_size_bytes, imported_at);
-session_tags(session_id FK, tag, PK(session_id, tag));   -- derived; "tagged X" join
-file_metadata(session_id FK, filename, key, value,       -- derived; RLOG-embedded
-              PK(session_id, filename, key));            -- Logger.recordMetadata k/v
+session_tags(session_path FK, tag, PK(session_path, tag)); -- derived; "tagged X" join
+file_metadata(session_path FK, filename, key, value,       -- derived; RLOG-embedded
+              PK(session_path, filename, key));            -- Logger.recordMetadata k/v
 ignored_hublogs(remote_path PK, filename, file_size_bytes, ignored_at);
 ftcscout_cache(event_code, season, payload_json, last_synced);
 ```
+
+Identity in the derived tables is the **folder path** — the one fact a rescan can
+never see twice. Paths are stored as **archive-relative keys** with `/` separators,
+canonicalised (case, symlinks, drive letter) at the `IndexStore` boundary via
+`realpath`: absolute paths go in and come out, relative keys are what SQLite
+compares. This means a moved/synced archive's index stays valid without a rebuild,
+and Windows case/separator variants of the same folder can't mint duplicate rows.
+`session_id` is carried as data only: it is `NULL` for a bare folder (ids are
+minted on write, never on read) and may be duplicated when a user copies a session
+folder in Explorer — both copies then index and search normally.
 
 Everything here is derivable from disk. Filters (spec §12) become indexed queries
 (`session_type`, `event_code`, `alliance`, tag join, "has file kind", "missing

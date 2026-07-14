@@ -1,4 +1,14 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -54,6 +64,52 @@ describe('scanTree', () => {
     expect(match.displayName).toBe('Q4 Blue B2')
     expect(match.logCount).toBe(2)
     expect(match.match).toMatchObject({ alliance: 'blue', station: 'B2', team_number: 12345 })
+  })
+
+  it('treats a folder with corrupt session.json as bare instead of failing the scan', () => {
+    const broken = join(root, 'Broken')
+    mkdirSync(broken, { recursive: true })
+    writeFileSync(join(broken, 'session.json'), '{ "display_name": "half writ')
+    writeSession(join(root, 'Fine'), { schema_version: 1, display_name: 'Fine' })
+
+    const tree = scanTree(root)
+    expect(tree.map((n) => n.name).sort()).toEqual(['Broken', 'Fine'])
+    const brokenNode = tree.find((n) => n.name === 'Broken')!
+    expect(brokenNode.hasSessionJson).toBe(false) // degraded to bare-folder defaults
+    expect(brokenNode.metadataInvalid).toBe(true) // distinct from a genuinely bare folder
+    expect(brokenNode.displayName).toBe('Broken')
+    expect(tree.find((n) => n.name === 'Fine')!.metadataInvalid).toBe(false)
+    // Reading never touches the corrupt file.
+    expect(readFileSync(join(broken, 'session.json'), 'utf-8')).toBe('{ "display_name": "half writ')
+  })
+
+  it('excludes transient artifacts (.tmp, editor backups) from counts and listings', () => {
+    const dir = join(root, 'Session')
+    writeSession(dir, { schema_version: 1, display_name: 'Session' })
+    writeFileSync(join(dir, 'Real_log.rlog'), 'log')
+    writeFileSync(join(dir, 'session.json.1234.tmp'), '{ half')
+    writeFileSync(join(dir, 'notes.md~'), 'editor backup')
+
+    expect(scanTree(root)[0].fileCount).toBe(1)
+    expect(listFolderFiles(dir).map((f) => f.filename)).toEqual(['Real_log.rlog'])
+  })
+
+  it('drops a malformed files[] entry without voiding the rest of session.json', () => {
+    const dir = join(root, 'Partial')
+    writeSession(dir, {
+      schema_version: 1,
+      display_name: 'Partial but valid',
+      files: [
+        { kind: 'auto_log' }, // hand-edit lost the filename
+        { filename: 'Present_log.rlog', kind: 'auto_log', source: 'control_hub' }
+      ]
+    })
+    writeFileSync(join(dir, 'Present_log.rlog'), 'log')
+
+    const session = getSession(dir)
+    expect(session.hasSessionJson).toBe(true)
+    expect(session.metadata.display_name).toBe('Partial but valid')
+    expect(session.metadata.files.map((f) => f.filename)).toEqual(['Present_log.rlog'])
   })
 
   it('returns [] for a missing root', () => {
@@ -158,6 +214,63 @@ describe('promoteFolder', () => {
     expect(promoted.metadata.display_name).toBe('Random_Folder')
     expect(promoted.metadata.session_type).toBe('general_session')
     expect(existsSync(join(bare, 'notes.md'))).toBe(false)
+  })
+
+  it('mints a session_id only on write, never on read', () => {
+    const bare = join(root, 'Random_Folder')
+    mkdirSync(bare, { recursive: true })
+    expect(getSession(bare).metadata.session_id).toBeUndefined() // reading is id-free
+    const promoted = promoteFolder(bare)
+    expect(promoted.metadata.session_id).toBeTruthy()
+    // The persisted id is stable across subsequent reads and writes.
+    expect(getSession(bare).metadata.session_id).toBe(promoted.metadata.session_id)
+    expect(updateMeta(bare, { tags: ['x'] }).metadata.session_id).toBe(promoted.metadata.session_id)
+  })
+
+  it('leaves no temp files behind after atomic sidecar writes', () => {
+    const s = createSession({ parentPath: root, displayName: 'Atomic', sessionType: 'general_session' })
+    updateMeta(s.path, { tags: ['a'] })
+    expect(readdirSync(s.path).filter((name) => name.endsWith('.tmp'))).toEqual([])
+  })
+
+  it('cleans up stale temp files from an interrupted earlier write', () => {
+    const s = createSession({ parentPath: root, displayName: 'Crashy', sessionType: 'general_session' })
+    writeFileSync(join(s.path, 'session.json.99999.tmp'), '{ interrupted')
+    updateMeta(s.path, { tags: ['recovered'] })
+    expect(readdirSync(s.path).filter((name) => name.endsWith('.tmp'))).toEqual([])
+  })
+
+  // POSIX-only: Windows chmod/stat only model the read-only attribute, so owner/
+  // group/other bits can't round-trip there (stat reports a synthesized ~0o666).
+  it.skipIf(process.platform === 'win32')(
+    'preserves existing permission bits across an atomic replace',
+    () => {
+      const s = createSession({ parentPath: root, displayName: 'Private', sessionType: 'general_session' })
+      const file = join(s.path, 'session.json')
+      chmodSync(file, 0o600)
+      updateMeta(s.path, { tags: ['secret'] })
+      expect(statSync(file).mode & 0o777).toBe(0o600)
+    }
+  )
+
+  it('backs up an invalid session.json before replacing it, never silently destroying it', () => {
+    const dir = join(root, 'Damaged')
+    mkdirSync(dir, { recursive: true })
+    const corrupt = '{ "display_name": "was hand-edited bad'
+    writeFileSync(join(dir, 'session.json'), corrupt)
+
+    const promoted = promoteFolder(dir)
+
+    expect(promoted.hasSessionJson).toBe(true)
+    expect(readFileSync(join(dir, 'session.json.bak'), 'utf-8')).toBe(corrupt) // original preserved
+    const rewritten = JSON.parse(readFileSync(join(dir, 'session.json'), 'utf-8'))
+    expect(rewritten.display_name).toBe('Damaged')
+
+    // A later invalid file gets its own backup rather than clobbering the first.
+    writeFileSync(join(dir, 'session.json'), '{ corrupt again')
+    updateMeta(dir, { tags: ['repaired'] })
+    expect(readFileSync(join(dir, 'session.json.bak'), 'utf-8')).toBe(corrupt)
+    expect(readFileSync(join(dir, 'session.json_2.bak'), 'utf-8')).toBe('{ corrupt again')
   })
 })
 

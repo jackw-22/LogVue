@@ -8,32 +8,33 @@ import type { SessionType, FileKind } from '@shared/types/session'
 import { LOG_KINDS } from '@shared/constants/fileKinds'
 import { DERIVED_TABLES, INDEX_SCHEMA_VERSION, SCHEMA_SQL } from './schema'
 import type { FileMetadataRow, FileRow, IndexRows, SessionRow, TagRow } from './rebuild'
+import { fromArchiveKey, toArchiveKey } from './indexPaths'
 import { buildSessionQuery } from './query'
 import type { ImportIdentity } from '../import/identity'
 
-/** Upsert a `sessions` row (used by both a full rebuild and a single-session reindex). */
+/** Upsert a `sessions` row keyed by path (used by both a full rebuild and a single-session reindex). */
 const INSERT_SESSION_SQL = `INSERT INTO sessions
-    (session_id, path, session_type, display_name, event_code, team_number,
+    (path, session_id, session_type, display_name, event_code, team_number,
      alliance, session_start, sort_key, updated_at)
    VALUES
-    (@session_id, @path, @session_type, @display_name, @event_code, @team_number,
+    (@path, @session_id, @session_type, @display_name, @event_code, @team_number,
      @alliance, @session_start, @sort_key, @updated_at)
-   ON CONFLICT(session_id) DO UPDATE SET
-     path=excluded.path, session_type=excluded.session_type,
+   ON CONFLICT(path) DO UPDATE SET
+     session_id=excluded.session_id, session_type=excluded.session_type,
      display_name=excluded.display_name, event_code=excluded.event_code,
      team_number=excluded.team_number, alliance=excluded.alliance,
      session_start=excluded.session_start, sort_key=excluded.sort_key,
      updated_at=excluded.updated_at`
 
 const INSERT_FILE_SQL = `INSERT INTO files
-    (session_id, filename, kind, remote_path, original_filename, file_size_bytes, imported_at, recorded_at)
+    (session_path, filename, kind, remote_path, original_filename, file_size_bytes, imported_at, recorded_at)
    VALUES
-    (@session_id, @filename, @kind, @remote_path, @original_filename, @file_size_bytes, @imported_at, @recorded_at)`
+    (@session_path, @filename, @kind, @remote_path, @original_filename, @file_size_bytes, @imported_at, @recorded_at)`
 
-const INSERT_TAG_SQL = `INSERT OR IGNORE INTO session_tags (session_id, tag) VALUES (@session_id, @tag)`
+const INSERT_TAG_SQL = `INSERT OR IGNORE INTO session_tags (session_path, tag) VALUES (@session_path, @tag)`
 
-const INSERT_FILE_META_SQL = `INSERT OR REPLACE INTO file_metadata (session_id, filename, key, value)
-   VALUES (@session_id, @filename, @key, @value)`
+const INSERT_FILE_META_SQL = `INSERT OR REPLACE INTO file_metadata (session_path, filename, key, value)
+   VALUES (@session_path, @filename, @key, @value)`
 
 /**
  * The local index (ARCHITECTURE.md §8) — the *only* module that touches the native
@@ -45,11 +46,46 @@ const INSERT_FILE_META_SQL = `INSERT OR REPLACE INTO file_metadata (session_id, 
 export class IndexStore {
   private readonly db: Db
 
-  constructor(dbPath: string) {
+  /**
+   * Canonical archive root this index belongs to. Rows are stored under
+   * archive-relative keys; absolute paths are converted at this class's
+   * boundary in both directions, so callers only ever see absolute paths and
+   * the stored keys survive the archive being moved.
+   */
+  readonly archiveRoot: string
+
+  constructor(dbPath: string, archiveRoot: string) {
+    this.archiveRoot = archiveRoot
     this.db = new Database(dbPath)
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('foreign_keys = ON')
     this.ensureSchema()
+  }
+
+  /** Archive-relative storage key for an absolute (canonical) session path. */
+  private toKey(absPath: string): string {
+    return toArchiveKey(this.archiveRoot, absPath)
+  }
+
+  /** Absolute path for a stored session key. */
+  private toAbs(key: string): string {
+    return fromArchiveKey(this.archiveRoot, key)
+  }
+
+  private toStoredSession(row: SessionRow): SessionRow {
+    return { ...row, path: this.toKey(row.path) }
+  }
+
+  private toStoredFile(row: FileRow): FileRow {
+    return { ...row, session_path: this.toKey(row.session_path) }
+  }
+
+  private toStoredTag(row: TagRow): TagRow {
+    return { ...row, session_path: this.toKey(row.session_path) }
+  }
+
+  private toStoredMeta(row: FileMetadataRow): FileMetadataRow {
+    return { ...row, session_path: this.toKey(row.session_path) }
   }
 
   /**
@@ -83,10 +119,10 @@ export class IndexStore {
       this.db.exec('DELETE FROM session_tags')
       this.db.exec('DELETE FROM files')
       this.db.exec('DELETE FROM sessions')
-      for (const s of data.sessions) insertSession.run(s)
-      for (const f of data.files) insertFile.run(f)
-      for (const t of data.tags) insertTag.run(t)
-      for (const m of data.fileMeta) insertMeta.run(m)
+      for (const s of data.sessions) insertSession.run(this.toStoredSession(s))
+      for (const f of data.files) insertFile.run(this.toStoredFile(f))
+      for (const t of data.tags) insertTag.run(this.toStoredTag(t))
+      for (const m of data.fileMeta) insertMeta.run(this.toStoredMeta(m))
     })
     replace(rows)
   }
@@ -106,17 +142,18 @@ export class IndexStore {
     const insertFile = this.db.prepare(INSERT_FILE_SQL)
     const insertTag = this.db.prepare(INSERT_TAG_SQL)
     const insertMeta = this.db.prepare(INSERT_FILE_META_SQL)
-    const deleteFiles = this.db.prepare('DELETE FROM files WHERE session_id = ?')
-    const deleteTags = this.db.prepare('DELETE FROM session_tags WHERE session_id = ?')
-    const deleteMeta = this.db.prepare('DELETE FROM file_metadata WHERE session_id = ?')
+    const deleteFiles = this.db.prepare('DELETE FROM files WHERE session_path = ?')
+    const deleteTags = this.db.prepare('DELETE FROM session_tags WHERE session_path = ?')
+    const deleteMeta = this.db.prepare('DELETE FROM file_metadata WHERE session_path = ?')
+    const key = this.toKey(session.path)
     const write = this.db.transaction(() => {
-      insertSession.run(session)
-      deleteFiles.run(session.session_id)
-      deleteTags.run(session.session_id)
-      deleteMeta.run(session.session_id)
-      for (const f of files) insertFile.run(f)
-      for (const t of tags) insertTag.run(t)
-      for (const m of fileMeta) insertMeta.run(m)
+      insertSession.run(this.toStoredSession(session))
+      deleteFiles.run(key)
+      deleteTags.run(key)
+      deleteMeta.run(key)
+      for (const f of files) insertFile.run(this.toStoredFile(f))
+      for (const t of tags) insertTag.run(this.toStoredTag(t))
+      for (const m of fileMeta) insertMeta.run(this.toStoredMeta(m))
     })
     write()
   }
@@ -127,14 +164,15 @@ export class IndexStore {
    * `import/identity.findDuplicates`.
    */
   importsOf(remotePath: string): ImportIdentity[] {
-    return this.db
+    const rows = this.db
       .prepare(
         `SELECT f.remote_path, f.original_filename, f.file_size_bytes, f.filename,
                 s.path AS sessionPath, s.display_name AS sessionLabel
-           FROM files f JOIN sessions s ON s.session_id = f.session_id
+           FROM files f JOIN sessions s ON s.path = f.session_path
           WHERE f.remote_path = ?`
       )
       .all(remotePath) as ImportIdentity[]
+    return rows.map((r) => ({ ...r, sessionPath: this.toAbs(r.sessionPath) }))
   }
 
   /** Mark a remote hub log as ignored (spec §15) — hidden from the default log view. */
@@ -205,12 +243,12 @@ export class IndexStore {
     const imported = this.db
       .prepare(
         `SELECT s.path AS path, s.display_name AS label
-           FROM files f JOIN sessions s ON s.session_id = f.session_id
+           FROM files f JOIN sessions s ON s.path = f.session_path
           WHERE f.remote_path = ? LIMIT 1`
       )
       .get(remotePath) as { path: string; label: string } | undefined
     if (imported) {
-      return { state: 'imported', sessionPath: imported.path, sessionLabel: imported.label }
+      return { state: 'imported', sessionPath: this.toAbs(imported.path), sessionLabel: imported.label }
     }
     const ignored = this.db
       .prepare('SELECT 1 FROM ignored_hublogs WHERE remote_path = ? LIMIT 1')
@@ -228,7 +266,7 @@ export class IndexStore {
     const { where, params } = buildSessionQuery(query)
     const rows = this.db
       .prepare(
-        `SELECT session_id, path, session_type, display_name, event_code,
+        `SELECT path, session_type, display_name, event_code,
                 team_number, alliance, session_start, sort_key
            FROM sessions s
           WHERE (${where})
@@ -237,7 +275,6 @@ export class IndexStore {
                    s.display_name COLLATE NOCASE`
       )
       .all(params) as Array<{
-      session_id: string
       path: string
       session_type: string
       display_name: string
@@ -248,15 +285,14 @@ export class IndexStore {
       sort_key: string | null
     }>
 
-    const ids = rows.map((r) => r.session_id)
-    const kinds = this.kindsBySession(ids)
-    const tags = this.tagsBySession(ids)
+    const paths = rows.map((r) => r.path)
+    const kinds = this.kindsBySession(paths)
+    const tags = this.tagsBySession(paths)
 
     return rows.map((r) => {
-      const rowKinds = kinds.get(r.session_id) ?? []
+      const rowKinds = kinds.get(r.path) ?? []
       return {
-        sessionId: r.session_id,
-        path: r.path,
+        path: this.toAbs(r.path),
         sessionType: r.session_type as SessionType,
         displayName: r.display_name,
         eventCode: r.event_code,
@@ -266,7 +302,7 @@ export class IndexStore {
         sortKey: r.sort_key,
         fileCount: rowKinds.length,
         logCount: rowKinds.filter((k) => LOG_KINDS.has(k as FileKind)).length,
-        tags: tags.get(r.session_id) ?? []
+        tags: tags.get(r.path) ?? []
       }
     })
   }
@@ -294,23 +330,24 @@ export class IndexStore {
     const trimmed = text?.trim()
     if (trimmed) {
       params.ftext = `%${trimmed}%`
+      // Stored session keys are archive-relative with '/' separators on every platform.
       textClause =
         `(f.filename LIKE @ftext ESCAPE '\\'` +
         ` OR EXISTS (SELECT 1 FROM sessions ancestor WHERE ` +
         `(s.path = ancestor.path OR ` +
         `(substr(s.path, 1, length(ancestor.path)) = ancestor.path ` +
-        `AND substr(s.path, length(ancestor.path) + 1, 1) IN ('/', char(92))))` +
+        `AND substr(s.path, length(ancestor.path) + 1, 1) = '/'))` +
         ` AND (ancestor.display_name LIKE @ftext ESCAPE '\\'` +
         ` OR ancestor.event_code LIKE @ftext ESCAPE '\\'` +
         ` OR EXISTS (SELECT 1 FROM session_tags ancestor_tag` +
-        ` WHERE ancestor_tag.session_id = ancestor.session_id` +
+        ` WHERE ancestor_tag.session_path = ancestor.path` +
         ` AND ancestor_tag.tag LIKE @ftext ESCAPE '\\'))))`
     }
-    return this.db
+    const rows = this.db
       .prepare(
         `SELECT f.filename, f.kind, f.file_size_bytes, f.imported_at, f.recorded_at,
                 s.path, s.display_name, s.session_type, s.alliance
-           FROM files f JOIN sessions s ON s.session_id = f.session_id
+           FROM files f JOIN sessions s ON s.path = f.session_path
           WHERE (${where}) AND ${textClause}`
       )
       .all(params) as Array<{
@@ -324,36 +361,37 @@ export class IndexStore {
       session_type: string
       alliance: string | null
     }>
+    return rows.map((r) => ({ ...r, path: this.toAbs(r.path) }))
   }
 
-  /** Map of session_id → its file kinds (one entry per file), for the matched ids only. */
-  private kindsBySession(ids: string[]): Map<string, string[]> {
+  /** Map of session path → its file kinds (one entry per file), for the matched paths only. */
+  private kindsBySession(paths: string[]): Map<string, string[]> {
     const out = new Map<string, string[]>()
-    if (ids.length === 0) return out
-    const placeholders = ids.map(() => '?').join(', ')
+    if (paths.length === 0) return out
+    const placeholders = paths.map(() => '?').join(', ')
     const rows = this.db
-      .prepare(`SELECT session_id, kind FROM files WHERE session_id IN (${placeholders})`)
-      .all(...ids) as Array<{ session_id: string; kind: string }>
-    for (const { session_id, kind } of rows) {
-      const list = out.get(session_id) ?? []
+      .prepare(`SELECT session_path, kind FROM files WHERE session_path IN (${placeholders})`)
+      .all(...paths) as Array<{ session_path: string; kind: string }>
+    for (const { session_path, kind } of rows) {
+      const list = out.get(session_path) ?? []
       list.push(kind)
-      out.set(session_id, list)
+      out.set(session_path, list)
     }
     return out
   }
 
-  /** Map of session_id → its tags, for the matched ids only. */
-  private tagsBySession(ids: string[]): Map<string, string[]> {
+  /** Map of session path → its tags, for the matched paths only. */
+  private tagsBySession(paths: string[]): Map<string, string[]> {
     const out = new Map<string, string[]>()
-    if (ids.length === 0) return out
-    const placeholders = ids.map(() => '?').join(', ')
+    if (paths.length === 0) return out
+    const placeholders = paths.map(() => '?').join(', ')
     const rows = this.db
-      .prepare(`SELECT session_id, tag FROM session_tags WHERE session_id IN (${placeholders}) ORDER BY tag`)
-      .all(...ids) as Array<{ session_id: string; tag: string }>
-    for (const { session_id, tag } of rows) {
-      const list = out.get(session_id) ?? []
+      .prepare(`SELECT session_path, tag FROM session_tags WHERE session_path IN (${placeholders}) ORDER BY tag`)
+      .all(...paths) as Array<{ session_path: string; tag: string }>
+    for (const { session_path, tag } of rows) {
+      const list = out.get(session_path) ?? []
       list.push(tag)
-      out.set(session_id, list)
+      out.set(session_path, list)
     }
     return out
   }
@@ -388,7 +426,7 @@ export class IndexStore {
           GROUP BY alliance ORDER BY count DESC, value`
       ),
       kinds: groupCount(
-        `SELECT kind AS value, COUNT(DISTINCT session_id) AS count FROM files
+        `SELECT kind AS value, COUNT(DISTINCT session_path) AS count FROM files
           GROUP BY kind ORDER BY count DESC, value`
       ),
       tags: groupCount(

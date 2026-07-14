@@ -13,6 +13,7 @@ import type {
 import {
   INDEX_FILE,
   INTERNAL_DIR,
+  isTransientArtifact,
   NOTES_FILE,
   RESERVED_NAMES,
   SESSION_JSON,
@@ -31,6 +32,7 @@ function countFiles(dir: string): { fileCount: number; logCount: number } {
     if (!entry.isFile()) continue
     const name = entry.name
     if (RESERVED_NAMES.has(name) || name === NOTES_FILE || name === INDEX_FILE) continue
+    if (isTransientArtifact(name)) continue
     fileCount += 1
     if (name.toLowerCase().endsWith('.rlog')) logCount += 1
   }
@@ -39,7 +41,7 @@ function countFiles(dir: string): { fileCount: number; logCount: number } {
 
 /** Build a tree node for a single folder and recurse into its subfolders. */
 function scanNode(dir: string): SessionNode {
-  const { metadata, hasSessionJson } = readMetadataOrDefault(dir)
+  const { metadata, hasSessionJson, metadataInvalid } = readMetadataOrDefault(dir)
   const { fileCount, logCount } = countFiles(dir)
 
   // Prefer the log-kind count from metadata when it's been curated; otherwise
@@ -57,6 +59,7 @@ function scanNode(dir: string): SessionNode {
     displayName: metadata.display_name,
     sessionType: metadata.session_type,
     hasSessionJson,
+    metadataInvalid,
     fileCount,
     logCount: hasSessionJson && metaLogCount > 0 ? metaLogCount : logCount,
     tags: metadata.tags,
@@ -85,8 +88,8 @@ export function scanTree(root: string): SessionNode[] {
 }
 
 function toSession(dir: string): Session {
-  const { metadata, hasSessionJson } = readMetadataOrDefault(dir)
-  return { path: dir, name: basename(dir), metadata, hasSessionJson }
+  const { metadata, hasSessionJson, metadataInvalid } = readMetadataOrDefault(dir)
+  return { path: dir, name: basename(dir), metadata, hasSessionJson, metadataInvalid }
 }
 
 /**
@@ -104,6 +107,7 @@ export function listFolderFiles(dir: string): FolderFile[] {
     if (!entry.isFile()) continue
     const name = entry.name
     if (RESERVED_NAMES.has(name) || name === NOTES_FILE || name === INDEX_FILE) continue
+    if (isTransientArtifact(name)) continue
     let sizeBytes: number | null = null
     let modifiedAt: string | null = null
     try {

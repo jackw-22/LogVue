@@ -82,8 +82,8 @@ describe('buildSessionQuery', () => {
     expect(where).toContain('s.session_type IN (@type0)')
     expect(where).toContain('s.alliance IN (@alli0)')
     expect(where).toContain('s.team_number IN (@team0)')
-    expect(where).toContain('EXISTS (SELECT 1 FROM files f WHERE f.session_id = s.session_id AND f.kind = @has0)')
-    expect(where).toContain('NOT EXISTS (SELECT 1 FROM files f WHERE f.session_id = s.session_id AND f.kind = @miss0)')
+    expect(where).toContain('EXISTS (SELECT 1 FROM files f WHERE f.session_path = s.path AND f.kind = @has0)')
+    expect(where).toContain('NOT EXISTS (SELECT 1 FROM files f WHERE f.session_path = s.path AND f.kind = @miss0)')
   })
 })
 

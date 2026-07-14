@@ -54,7 +54,8 @@ export interface GeneralInfo {
 /** The full contents of a `session.json` (spec §4). */
 export interface SessionMetadata {
   schema_version: number
-  session_id: string
+  /** Minted when the file is first written; absent on unpersisted discovery defaults. */
+  session_id?: string
   session_type: SessionType
   display_name: string
   created_at: string
@@ -79,6 +80,8 @@ export interface Session {
   name: string // folder name
   metadata: SessionMetadata
   hasSessionJson: boolean // false ⇒ metadata is discovery defaults, not yet written
+  /** True when a session.json exists but is unreadable — shown as bare with a warning; writes back it up first. */
+  metadataInvalid?: boolean
 }
 
 /**
@@ -91,6 +94,8 @@ export interface SessionNode {
   displayName: string
   sessionType: SessionType
   hasSessionJson: boolean
+  /** True when a session.json exists but is unreadable (corrupt/foreign). */
+  metadataInvalid?: boolean
   fileCount: number
   /** Logs directly in this folder; tree views may add descendant counts. */
   logCount: number

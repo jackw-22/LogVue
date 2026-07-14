@@ -33,6 +33,12 @@ const fileSchema = z
   })
   .passthrough()
 
+/** A malformed entry (e.g. missing filename) drops out; it must not void the whole file. */
+const lenientFilesSchema = z
+  .array(fileSchema.nullable().catch(null))
+  .default([])
+  .transform((files) => files.filter((f): f is NonNullable<typeof f> => f !== null))
+
 const metadataSchema = z
   .object({
     schema_version: z.number().default(CURRENT_SCHEMA_VERSION),
@@ -46,7 +52,7 @@ const metadataSchema = z
     sort_key: z.string().nullish(),
     tags: z.array(z.string()).default([]),
     notes_file: z.string().default('notes.md'),
-    files: z.array(fileSchema).default([])
+    files: lenientFilesSchema
   })
   .passthrough()
 
@@ -54,11 +60,15 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
-/** Discovery defaults for a folder with no `session.json` (spec §4.2). */
+/**
+ * Discovery defaults for a folder with no `session.json` (spec §4.2). Deliberately
+ * carries no `session_id`: ids are minted only when metadata is persisted
+ * (`writeMetadata`), so merely reading a bare folder yields the same result every
+ * time — the index keys sessions by path, not by id.
+ */
 export function makeDefaultMetadata(folderName: string, now = nowIso()): SessionMetadata {
   return {
     schema_version: CURRENT_SCHEMA_VERSION,
-    session_id: crypto.randomUUID(),
     session_type: 'general_session',
     display_name: folderName,
     created_at: now,
@@ -81,7 +91,6 @@ export function parseSessionJson(raw: unknown, folderName: string, now = nowIso(
   return {
     ...parsed,
     schema_version: parsed.schema_version ?? CURRENT_SCHEMA_VERSION,
-    session_id: parsed.session_id || crypto.randomUUID(),
     display_name: parsed.display_name || folderName,
     created_at: parsed.created_at || now,
     updated_at: parsed.updated_at || now

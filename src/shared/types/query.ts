@@ -23,9 +23,8 @@ export interface SessionQuery {
   missingKinds?: FileKind[]
 }
 
-/** One session in a query result — the index row plus derived counts and tags. */
+/** One session in a query result — the index row plus derived counts and tags. Identity is `path`. */
 export interface SessionQueryRow {
-  sessionId: string
   path: string
   sessionType: SessionType
   displayName: string

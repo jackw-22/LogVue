@@ -25,15 +25,16 @@ function inClause(
 
 /** Match a search term on the current session or any ancestor grouping session. */
 function descendantTextMatch(param: string): string {
+  // Stored session keys are archive-relative with '/' separators on every platform.
   const ancestorScope =
     `(s.path = ancestor.path OR ` +
     `(substr(s.path, 1, length(ancestor.path)) = ancestor.path ` +
-    `AND substr(s.path, length(ancestor.path) + 1, 1) IN ('/', char(92))))`
+    `AND substr(s.path, length(ancestor.path) + 1, 1) = '/'))`
   const ancestorText =
     `(ancestor.display_name LIKE @${param} ESCAPE '\\'` +
     ` OR ancestor.event_code LIKE @${param} ESCAPE '\\'` +
     ` OR EXISTS (SELECT 1 FROM session_tags ancestor_tag` +
-    ` WHERE ancestor_tag.session_id = ancestor.session_id` +
+    ` WHERE ancestor_tag.session_path = ancestor.path` +
     ` AND ancestor_tag.tag LIKE @${param} ESCAPE '\\'))`
   return `EXISTS (SELECT 1 FROM sessions ancestor WHERE ${ancestorScope} AND ${ancestorText})`
 }
@@ -75,7 +76,7 @@ export function buildSessionQuery(query: SessionQuery): BuiltQuery {
   tags.forEach((tag, i) => {
     const name = `tag${i}`
     params[name] = tag
-    clauses.push(`EXISTS (SELECT 1 FROM session_tags t WHERE t.session_id = s.session_id AND t.tag = @${name})`)
+    clauses.push(`EXISTS (SELECT 1 FROM session_tags t WHERE t.session_path = s.path AND t.tag = @${name})`)
   })
 
   // Has kind: session must contain a file of EVERY listed kind.
@@ -83,7 +84,7 @@ export function buildSessionQuery(query: SessionQuery): BuiltQuery {
   hasKinds.forEach((kind, i) => {
     const name = `has${i}`
     params[name] = kind
-    clauses.push(`EXISTS (SELECT 1 FROM files f WHERE f.session_id = s.session_id AND f.kind = @${name})`)
+    clauses.push(`EXISTS (SELECT 1 FROM files f WHERE f.session_path = s.path AND f.kind = @${name})`)
   })
 
   // Missing kind: session must contain a file of NONE of these kinds.
@@ -91,7 +92,7 @@ export function buildSessionQuery(query: SessionQuery): BuiltQuery {
   missingKinds.forEach((kind, i) => {
     const name = `miss${i}`
     params[name] = kind
-    clauses.push(`NOT EXISTS (SELECT 1 FROM files f WHERE f.session_id = s.session_id AND f.kind = @${name})`)
+    clauses.push(`NOT EXISTS (SELECT 1 FROM files f WHERE f.session_path = s.path AND f.kind = @${name})`)
   })
 
   return { where: clauses.length ? clauses.join(' AND ') : '1', params }

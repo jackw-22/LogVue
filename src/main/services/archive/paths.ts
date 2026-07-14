@@ -10,6 +10,16 @@ export const INDEX_FILE = 'index.sqlite'
 /** Files/folders the scanner ignores as archive plumbing, not content. */
 export const RESERVED_NAMES = new Set([SESSION_JSON, INTERNAL_DIR, INDEX_FILE])
 
+/**
+ * Transient artifacts (in-flight atomic writes, editor backups) that must never
+ * be listed, indexed, or watched as session content. One predicate shared by the
+ * folder listing, the index walk, and the archive watcher so a `.tmp` left behind
+ * by a crashed write can't surface as a loose file anywhere.
+ */
+export function isTransientArtifact(name: string): boolean {
+  return name.endsWith('.tmp') || name.endsWith('~')
+}
+
 // Characters illegal in Windows/POSIX file names. Spaces (→ underscore) and
 // hyphens (legal, readable) are deliberately NOT in this set.
 const ILLEGAL_FS_CHARS = new RegExp('[<>:"/\\\\|?*\\x00-\\x1f]', 'g')

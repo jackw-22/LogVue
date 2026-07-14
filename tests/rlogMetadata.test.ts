@@ -143,8 +143,8 @@ describe('collectIndexRows file metadata', () => {
     const { fileMeta } = collectIndexRows(root)
     expect(fileMeta).toEqual(
       expect.arrayContaining([
-        { session_id: 's-1', filename: 'Tele_log_1.rlog', key: 'GitSHA', value: 'a1b2c3d4e5f6' },
-        { session_id: 's-1', filename: 'Tele_log_1.rlog', key: 'GitDirty', value: 'true' }
+        { session_path: dir, filename: 'Tele_log_1.rlog', key: 'GitSHA', value: 'a1b2c3d4e5f6' },
+        { session_path: dir, filename: 'Tele_log_1.rlog', key: 'GitDirty', value: 'true' }
       ])
     )
     expect(fileMeta).toHaveLength(2)

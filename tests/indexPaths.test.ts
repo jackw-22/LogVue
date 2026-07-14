@@ -1,11 +1,14 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'fs'
+import { join, sep } from 'path'
 import { tmpdir } from 'os'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  canonicalPath,
   ensureIndexLocation,
+  fromArchiveKey,
   indexDirectory,
-  indexPath
+  indexPath,
+  toArchiveKey
 } from '../src/main/services/index/indexPaths'
 
 let root: string
@@ -47,5 +50,42 @@ describe('ensureIndexLocation', () => {
     expect(ensureIndexLocation(root)).toBe(indexPath(root))
     expect(readFileSync(indexPath(root), 'utf-8')).toBe('current')
     expect(readFileSync(legacy, 'utf-8')).toBe('legacy')
+  })
+})
+
+describe('archive keys', () => {
+  it('round-trips a nested session path as a /-separated relative key', () => {
+    const abs = join(root, '2026', 'APOC26', 'Q4_Blue_B2')
+    const key = toArchiveKey(root, abs)
+    expect(key).toBe('2026/APOC26/Q4_Blue_B2')
+    expect(fromArchiveKey(root, key)).toBe(abs)
+  })
+
+  it('uses / separators regardless of the platform separator', () => {
+    const key = toArchiveKey(root, join(root, 'a', 'b'))
+    expect(key).toBe('a/b')
+    expect(key.includes(sep === '/' ? '\\' : sep)).toBe(false)
+  })
+
+  it('rejects the root itself and paths outside the root', () => {
+    expect(() => toArchiveKey(root, root)).toThrow(/not inside the archive root/)
+    expect(() => toArchiveKey(root, join(root, '..', 'elsewhere'))).toThrow(
+      /not inside the archive root/
+    )
+  })
+})
+
+describe('canonicalPath', () => {
+  it('resolves symlinks so aliased spellings collapse to one identity', () => {
+    const real = join(root, 'RealArchive')
+    mkdirSync(real, { recursive: true })
+    const link = join(root, 'LinkedArchive')
+    symlinkSync(real, link, 'dir')
+    expect(canonicalPath(link)).toBe(canonicalPath(real))
+  })
+
+  it('falls back to plain resolution for paths that do not exist', () => {
+    const missing = join(root, 'nope')
+    expect(canonicalPath(missing)).toBe(missing)
   })
 })

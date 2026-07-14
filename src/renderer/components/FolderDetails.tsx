@@ -11,6 +11,8 @@ interface Props {
   path: string
   name: string
   displayName: string
+  /** The folder has a session.json, but it couldn't be read (corrupt/foreign). */
+  metadataInvalid?: boolean
   onRecognise: () => void
   busy: boolean
 }
@@ -23,6 +25,7 @@ export default function FolderDetails({
   path,
   name,
   displayName,
+  metadataInvalid,
   onRecognise,
   busy
 }: Props): JSX.Element {
@@ -44,6 +47,16 @@ export default function FolderDetails({
         <h2 className="folder-title">📁 {displayName}</h2>
         <code className="details-path">{name}</code>
       </div>
+
+      {metadataInvalid && (
+        <div className="callout">
+          <p>
+            This folder has a <code>session.json</code> that couldn’t be read — it may be
+            corrupt or half-edited. Fix it by hand to restore the session, or recognise the
+            folder below: the unreadable file is kept as <code>session.json.bak</code>.
+          </p>
+        </div>
+      )}
 
       <div className="callout neutral">
         {looseLogs > 0 ? (

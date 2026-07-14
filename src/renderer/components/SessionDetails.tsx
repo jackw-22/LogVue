@@ -276,6 +276,7 @@ export default function SessionDetails({ path, onNewChild }: Props): JSX.Element
         path={path}
         name={session.name}
         displayName={m.display_name}
+        metadataInvalid={session.metadataInvalid}
         onRecognise={() => promote.mutate()}
         busy={promote.isPending || update.isPending}
       />

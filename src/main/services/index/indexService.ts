@@ -4,7 +4,7 @@ import type { LogQueryRow, SessionQuery, SessionQueryResult } from '@shared/type
 import type { FileKind, SessionType } from '@shared/types/session'
 import { parseRlogFilename } from '../adb/rlogFilename'
 import { IndexStore } from './IndexStore'
-import { ensureIndexLocation } from './indexPaths'
+import { canonicalPath, ensureIndexLocation } from './indexPaths'
 import {
   collectFileMetadataRows,
   collectFileRows,
@@ -20,12 +20,18 @@ import {
  */
 let current: { root: string; store: IndexStore } | null = null
 
-/** Get (opening if needed) the index store bound to `root`, or null when no root is set. */
+/**
+ * Get (opening if needed) the index store bound to `root`, or null when no root is
+ * set. The root is canonicalised once here and that spelling is used for the scan
+ * walk and for every key conversion, so caller-provided variants (case, separators,
+ * symlinks) all land on the same store and the same row identities.
+ */
 export function getIndexStore(root: string | null | undefined): IndexStore | null {
   if (!root || !existsSync(root)) return null
-  if (current && current.root === root) return current.store
+  const canonicalRoot = canonicalPath(root)
+  if (current && current.root === canonicalRoot) return current.store
   current?.store.close()
-  current = { root, store: new IndexStore(ensureIndexLocation(root)) }
+  current = { root: canonicalRoot, store: new IndexStore(ensureIndexLocation(canonicalRoot), canonicalRoot) }
   return current.store
 }
 
@@ -33,23 +39,26 @@ export function getIndexStore(root: string | null | undefined): IndexStore | nul
 export function rebuild(root: string | null | undefined): { sessions: number; files: number } {
   const store = getIndexStore(root)
   if (!store) return { sessions: 0, files: 0 }
-  return rebuildIndex(store, root as string)
+  return rebuildIndex(store, store.archiveRoot)
 }
 
 /**
  * Re-index a single session from disk after an import (spec §6.1 step 4), so its hub
- * logs flip to "imported" without a full rescan. No-op when no index is open.
+ * logs flip to "imported" without a full rescan. No-op when no index is open. The
+ * caller-provided path is canonicalised so an alternate spelling of an already-indexed
+ * folder updates that row instead of minting a duplicate.
  */
 export function reindexSession(root: string | null | undefined, path: string): void {
   const store = getIndexStore(root)
   if (!store) return
-  const { metadata } = readMetadataOrDefault(path)
-  const files = collectFileRows(path, metadata)
+  const dir = canonicalPath(path)
+  const { metadata } = readMetadataOrDefault(dir)
+  const files = collectFileRows(dir, metadata)
   store.indexSession(
-    toSessionRow(path, metadata),
+    toSessionRow(dir, metadata),
     files,
-    toTagRows(metadata.session_id, metadata),
-    collectFileMetadataRows(path, files)
+    toTagRows(dir, metadata),
+    collectFileMetadataRows(dir, files)
   )
 }
 
@@ -114,11 +123,13 @@ function emptyFacets(): SessionQueryResult['facets'] {
  * Cold start (ARCHITECTURE §6.2): open the index for `root` and build it if empty.
  * A stale schema is handled inside IndexStore (derived tables get dropped), so an
  * empty index there triggers a rebuild here. Safe to call with no root (no-op).
+ * A non-empty index is trusted as-is: its keys are archive-relative, so they stay
+ * valid even when the whole archive folder was moved since the last run.
  */
 export function ensureIndexBuilt(root: string | null | undefined): void {
   const store = getIndexStore(root)
   if (!store) return
-  if (store.counts().sessions === 0) rebuildIndex(store, root as string)
+  if (store.counts().sessions === 0) rebuildIndex(store, store.archiveRoot)
 }
 
 /** Release the open DB handle (call on app quit). */
