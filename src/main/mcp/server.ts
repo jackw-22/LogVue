@@ -12,13 +12,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
 import { getSettings } from '../config/settings'
+import { createSessionCommand } from '../commands'
 import { listHubLogs } from '../services/adb/hublogs'
 import { getAdbClient } from '../services/adb/runtime'
-import { createSession } from '../services/archive/ArchiveService'
 import { readMetadata } from '../services/archive/SessionStore'
 import { runSingleImportTask } from '../services/import/importTask'
-import { reindexSession } from '../services/index/indexService'
-import { notifyArchiveChanged } from '../services/watcher/Watcher'
 import { INTERNAL_DIR } from '../services/archive/paths'
 import { SESSION_TYPES } from '@shared/constants/sessionTypes'
 import type { McpStatus } from '@shared/types/ipc'
@@ -105,9 +103,9 @@ function normalizeAgentPath(input: string): string {
   return wsl ? `${wsl[1].toUpperCase()}:\\${(wsl[2] ?? '').replace(/\//g, '\\')}` : input
 }
 
-function createLogVueMcpServer(): McpServer {
+function createLogVueMcpServer(appVersion: string): McpServer {
   const server = new McpServer(
-    { name: 'logvue', version: '0.1.0' },
+    { name: 'logvue', version: appVersion },
     {
       instructions:
         'Use these tools only for live Control Hub access and LogVue-managed imports. Read, search, and edit archive files such as session.json and notes.md directly through the filesystem; LogVue watches the archive and refreshes its UI automatically.'
@@ -156,9 +154,11 @@ function createLogVueMcpServer(): McpServer {
     },
     async ({ parentPath, displayName, sessionType }) => {
       const { root, path: resolvedParent } = archivePath(parentPath, false)
-      const session = createSession({ parentPath: resolvedParent, displayName, sessionType })
-      reindexSession(root, session.path)
-      notifyArchiveChanged(root, [session.path])
+      const session = createSessionCommand(root, {
+        parentPath: resolvedParent,
+        displayName,
+        sessionType
+      })
       return result({ session, archiveRelativePath: relative(root, session.path) })
     }
   )
@@ -197,7 +197,7 @@ function createLogVueMcpServer(): McpServer {
   return server
 }
 
-export async function startMcpServer(): Promise<void> {
+export async function startMcpServer(appVersion: string): Promise<void> {
   if (httpServer) return
   bearerToken = loadStableBearerToken()
   lastRequestAt = null
@@ -218,7 +218,7 @@ export async function startMcpServer(): Promise<void> {
       return
     }
     lastRequestAt = new Date().toISOString()
-    void handleMcpRequest(req, res)
+    void handleMcpRequest(req, res, appVersion)
   })
 
   await new Promise<void>((resolveReady, reject) => {
@@ -244,8 +244,12 @@ function installMcpBridge(): void {
   }
 }
 
-async function handleMcpRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const server = createLogVueMcpServer()
+async function handleMcpRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  appVersion: string
+): Promise<void> {
+  const server = createLogVueMcpServer(appVersion)
   const requestTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
   let closed = false
   const close = async () => {

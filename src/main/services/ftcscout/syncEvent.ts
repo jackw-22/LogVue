@@ -4,8 +4,7 @@ import type { FtcScoutEventPayload, FtcScoutSyncRequest, FtcScoutSyncResult } fr
 import type { SessionMetadata } from '@shared/types/session'
 import { makeDefaultMetadata } from '@shared/schema/sessionJson'
 import { formatMatchStation } from '@shared/format/match'
-import { getSettings } from '../../config/settings'
-import { getIndexStore, reindexSession } from '../index/indexService'
+import { getIndexStore } from '../index/indexService'
 import { readMetadataOrDefault, writeMetadata } from '../archive/SessionStore'
 import { toFolderName, uniqueChildDir } from '../archive/paths'
 import { FtcScoutClient } from './FtcScoutClient'
@@ -27,10 +26,11 @@ const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve)
 
 export async function syncFtcScoutEvent(
   client: FtcScoutClient,
+  root: string | null | undefined,
   req: FtcScoutSyncRequest,
-  hooks?: SyncHooks
+  hooks?: SyncHooks,
+  onSessionTouched?: (path: string) => void
 ): Promise<FtcScoutSyncResult> {
-  const root = getSettings().archiveRoot
   const store = getIndexStore(root)
   const code = req.eventCode.trim().toUpperCase()
   if (!root || !store) throw new Error('Choose a library folder before syncing FTCScout')
@@ -98,7 +98,7 @@ export async function syncFtcScoutEvent(
         teams: [req.teamNumber]
       }
       writeMetadata(dir, metadata)
-      reindexSession(root, dir)
+      onSessionTouched?.(dir)
       created += 1
       hooks?.onMatchDone?.(String(match.ftcscoutId), 'created')
       continue
@@ -124,10 +124,10 @@ export async function syncFtcScoutEvent(
       updated += 1
       hooks?.onMatchDone?.(String(match.ftcscoutId), 'updated')
     }
-    reindexSession(root, existingDir)
+    onSessionTouched?.(existingDir)
   }
 
-  reindexSession(root, req.eventPath)
+  onSessionTouched?.(req.eventPath)
   return { event: source.event, teamNumber: req.teamNumber, fromCache: source.fromCache, created, updated, unchanged }
 }
 

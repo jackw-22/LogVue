@@ -4,24 +4,30 @@ import { join } from 'path'
 import type { AppInfo, IpcApi } from '@shared/types/ipc'
 import { getSettings, saveSettings } from '../config/settings'
 import * as archive from '../services/archive/ArchiveService'
-import { readNotes, writeNotes } from '../services/archive/SessionStore'
+import { readNotes } from '../services/archive/SessionStore'
 import {
   ensureIndexBuilt,
   getIndexStore,
   librarySizeBytes,
   queryLogs,
-  querySessions,
-  rebuild,
-  reindexSession
+  querySessions
 } from '../services/index/indexService'
 import { listHubLogs } from '../services/adb/hublogs'
 import { getAdbClient, refreshAdbClient } from '../services/adb/runtime'
 import { FtcScoutClient } from '../services/ftcscout/FtcScoutClient'
-import { syncFtcScoutEvent } from '../services/ftcscout/syncEvent'
 import { startArchiveWatcher } from '../services/watcher/Watcher'
 import { getMcpStatus, refreshMcpDiscoveryFile } from '../mcp/server'
 import { listTasks, startTask } from '../services/tasks/TaskService'
 import { runImportTask, runNewSessionImportTask, runSingleImportTask } from '../services/import/importTask'
+import {
+  createSessionCommand,
+  deleteSessionCommand,
+  promoteFolderCommand,
+  rebuildIndexCommand,
+  syncFtcScoutEventCommand,
+  updateMetaCommand,
+  writeNotesCommand
+} from '../commands'
 
 const ftcScout = new FtcScoutClient()
 
@@ -122,32 +128,19 @@ const handlers: Handlers = {
     const error = await shell.openPath(join(path, filename))
     if (error) throw new Error(error)
   },
-  'archive:createSession': async (input) => {
-    const session = archive.createSession(input)
-    reindexSession(getSettings().archiveRoot, session.path)
-    return session
-  },
-  'archive:updateMeta': async (path, patch) => {
-    const session = archive.updateMeta(path, patch)
-    // Keep the index in step so type/tag/name edits are reflected in filters (spec §12).
-    reindexSession(getSettings().archiveRoot, path)
-    return session
-  },
+  'archive:createSession': async (input) =>
+    createSessionCommand(getSettings().archiveRoot, input),
+  'archive:updateMeta': async (path, patch) =>
+    updateMetaCommand(getSettings().archiveRoot, path, patch),
   'archive:deleteSessionSummary': async (path) =>
     archive.deleteSessionSummary(getSettings().archiveRoot, path),
-  'archive:deleteSession': async (path) => {
-    const root = getSettings().archiveRoot
-    const summary = archive.deleteSession(root, path)
-    rebuild(root)
-    return summary
-  },
-  'archive:promoteFolder': async (path) => {
-    const session = archive.promoteFolder(path)
-    reindexSession(getSettings().archiveRoot, path)
-    return session
-  },
+  'archive:deleteSession': async (path) =>
+    deleteSessionCommand(getSettings().archiveRoot, path),
+  'archive:promoteFolder': async (path) =>
+    promoteFolderCommand(getSettings().archiveRoot, path),
   'archive:readNotes': async (path) => readNotes(path),
-  'archive:writeNotes': async (path, md) => writeNotes(path, md),
+  'archive:writeNotes': async (path, md) =>
+    writeNotesCommand(getSettings().archiveRoot, path, md),
   /**
    * `rebuild` is synchronous (readdirSync + sync sqlite) and blocks main start to
    * finish, so it can't report how far along it is — the task is indeterminate and
@@ -164,7 +157,7 @@ const handlers: Handlers = {
     })
     await new Promise((resolve) => setImmediate(resolve))
     try {
-      const counts = rebuild(getSettings().archiveRoot)
+      const counts = rebuildIndexCommand(getSettings().archiveRoot)
       task.patch({ title: 'Index rebuilt' })
       task.succeed(`${counts.sessions} sessions · ${counts.files} files`)
       return counts
@@ -239,7 +232,7 @@ const handlers: Handlers = {
       targetPath: req.eventPath
     })
     try {
-      const result = await syncFtcScoutEvent(ftcScout, req, {
+      const result = await syncFtcScoutEventCommand(ftcScout, getSettings().archiveRoot, req, {
         onPlan: (matches) => task.setItems(matches.map((m) => ({ ...m, bytes: null }))),
         onMatchDone: (id, outcome) => task.itemStatus(id, 'done', outcome)
       })

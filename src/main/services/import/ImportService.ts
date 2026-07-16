@@ -13,7 +13,7 @@ import { createSession } from '../archive/ArchiveService'
 import { readMetadataOrDefault, writeMetadata } from '../archive/SessionStore'
 import { uniqueFilePath } from '../archive/paths'
 import type { AdbLike } from '../adb/AdbClient'
-import { getIndexStore, reindexSession } from '../index/indexService'
+import { getIndexStore } from '../index/indexService'
 import { guessFileKind } from './fileKind'
 import { findDuplicates } from './identity'
 import { withPullProgress } from './pullProgress'
@@ -29,21 +29,21 @@ export interface ImportHooks {
 }
 
 /**
- * The core action (ARCHITECTURE §6.1, spec §7.4): pull a remote hub log into a
- * session folder, append it to `session.json`, and update the index. Never renames
- * or deletes the remote file (invariant #7); import *appends* (invariant #4).
+ * The filesystem mutation behind the import command (ARCHITECTURE §6.1, spec
+ * §7.4): pull a remote hub log into a session folder and append it to
+ * `session.json`. Never renames or deletes the remote file (invariant #7);
+ * import *appends* (invariant #4). The command layer owns the resulting reindex
+ * and renderer notification.
  *
  *   1. duplicate check against the index (skipped when `force`) — spec §14
  *   2. `adb pull` into the session folder (original name kept, collisions suffixed)
  *   3. append a `SessionFile` to `session.json`, bumping `updated_at`
- *   4. re-index the session so the hub-log row flips to "imported"
  */
 export async function importToSession(
   adb: AdbLike,
   root: string | null | undefined,
   req: ImportRequest,
-  hooks?: ImportHooks,
-  reindexAfter = true
+  hooks?: ImportHooks
 ): Promise<ImportResult> {
   if (!req.force) {
     const store = getIndexStore(root)
@@ -89,8 +89,6 @@ export async function importToSession(
     ...metadata,
     files: [...metadata.files, file]
   })
-  if (reindexAfter) reindexSession(root, req.sessionPath)
-
   const session: Session = {
     path: req.sessionPath,
     name: basename(req.sessionPath),
@@ -119,20 +117,14 @@ async function importEach(
   for (const log of logs) {
     try {
       results.push(
-        await importToSession(
-          adb,
-          root,
-          {
-            remotePath: log.remotePath,
-            filename: log.filename,
-            fileSize: log.fileSize,
-            recordedAt: log.recordedAt,
-            sessionPath,
-            force
-          },
-          hooks,
-          false
-        )
+        await importToSession(adb, root, {
+          remotePath: log.remotePath,
+          filename: log.filename,
+          fileSize: log.fileSize,
+          recordedAt: log.recordedAt,
+          sessionPath,
+          force
+        }, hooks)
       )
     } catch (err) {
       const result: ImportResult = {
@@ -143,10 +135,6 @@ async function importEach(
       results.push(result)
     }
   }
-  // Re-reading every accumulated RLOG and replacing the session's index rows for
-  // each individual file makes a batch quadratic. The metadata file is already
-  // updated after every pull, so one final projection produces the same index.
-  reindexSession(root, sessionPath)
   return results
 }
 

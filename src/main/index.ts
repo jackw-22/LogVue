@@ -57,7 +57,7 @@ app.whenReady().then(() => {
     console.error('Index build on startup failed (will run without index):', err)
   }
   createWindow()
-  void startMcpServer().catch((err) => {
+  void startMcpServer(app.getVersion()).catch((err) => {
     console.error('MCP server failed to start (LogVue will continue without it):', err)
   })
 

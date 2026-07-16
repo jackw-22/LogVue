@@ -1,6 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Api } from '@shared/types/api'
-import type { IpcApi } from '@shared/types/ipc'
+import type { IpcApi, IpcEvents } from '@shared/types/ipc'
+
+function subscribe<K extends keyof IpcEvents>(
+  channel: K,
+  handler: (payload: IpcEvents[K]) => void
+): () => void {
+  const listener = (_event: Electron.IpcRendererEvent, payload: IpcEvents[K]) => handler(payload)
+  ipcRenderer.on(channel, listener)
+  return () => ipcRenderer.off(channel, listener)
+}
 
 /**
  * The entire bridge: one generic, typed `invoke`. No raw `ipcRenderer`, `fs`, or
@@ -11,18 +20,10 @@ const api: Api = {
     return ipcRenderer.invoke(channel, ...args) as ReturnType<IpcApi[K]>
   },
   onArchiveChanged(handler) {
-    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof handler>[0]) => {
-      handler(payload)
-    }
-    ipcRenderer.on('archive:changed', listener)
-    return () => ipcRenderer.off('archive:changed', listener)
+    return subscribe('archive:changed', handler)
   },
   onTaskUpdate(handler) {
-    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof handler>[0]) => {
-      handler(payload)
-    }
-    ipcRenderer.on('tasks:update', listener)
-    return () => ipcRenderer.off('tasks:update', listener)
+    return subscribe('tasks:update', handler)
   }
 }
 

@@ -1,6 +1,6 @@
-import { BrowserWindow } from 'electron'
 import { formatBytes } from '@shared/format/bytes'
 import type { Task, TaskItem, TaskItemStatus, TaskKind } from '@shared/types/tasks'
+import { emitIpcEvent } from '../../ipc/events'
 
 /**
  * The registry behind the activity toast stack. `start()` returns a handle the
@@ -22,9 +22,7 @@ const tasks = new Map<string, Task>()
 let seq = 0
 
 function broadcast(task: Task): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('tasks:update', task)
-  }
+  emitIpcEvent('tasks:update', task)
 }
 
 /** Live tasks plus recently-finished ones — what a freshly-mounted renderer should show. */

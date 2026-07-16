@@ -11,8 +11,12 @@ import type {
 import type { AdbLike } from '../adb/AdbClient'
 import { readMetadataOrDefault } from '../archive/SessionStore'
 import { startTask, type TaskHandle } from '../tasks/TaskService'
-import { pauseArchiveWatcher } from '../watcher/Watcher'
-import { importBatchToSession, importToNewSession, importToSession, type ImportHooks } from './ImportService'
+import {
+  batchImportHubLogsCommand,
+  importHubLogsToNewSessionCommand,
+  importHubLogCommand
+} from '../../commands'
+import type { ImportHooks } from './ImportService'
 
 /**
  * Wraps a batch import in an activity task (spec §7.4 + the progress bubble). Byte
@@ -78,7 +82,6 @@ export async function runImportTask(
   root: string | null | undefined,
   req: BatchImportRequest
 ): Promise<ImportResult[]> {
-  const resumeWatcher = pauseArchiveWatcher()
   const label = sessionLabel(req.sessionPath)
   const handle = startTask({
     kind: 'import',
@@ -89,15 +92,13 @@ export async function runImportTask(
   handle.setItems(itemsFor(req.logs))
 
   try {
-    const results = await importBatchToSession(adb, root, req, hooksFor(handle, req.logs))
+    const results = await batchImportHubLogsCommand(adb, root, req, hooksFor(handle, req.logs))
     attachRetries(handle, req.logs, req.sessionPath)
     finish(handle, results, label, req.sessionPath)
     return results
   } catch (err) {
     handle.fail(err)
     throw err
-  } finally {
-    resumeWatcher()
   }
 }
 
@@ -107,7 +108,6 @@ export async function runSingleImportTask(
   root: string | null | undefined,
   req: ImportRequest
 ): Promise<ImportResult> {
-  const resumeWatcher = pauseArchiveWatcher()
   const label = sessionLabel(req.sessionPath)
   const handle = startTask({
     kind: 'import',
@@ -118,14 +118,12 @@ export async function runSingleImportTask(
   handle.setItems(itemsFor([req]))
 
   try {
-    const result = await importToSession(adb, root, req, hooksFor(handle, [req]))
+    const result = await importHubLogCommand(adb, root, req, hooksFor(handle, [req]))
     finish(handle, [result], label, req.sessionPath)
     return result
   } catch (err) {
     handle.fail(err)
     throw err
-  } finally {
-    resumeWatcher()
   }
 }
 
@@ -135,7 +133,6 @@ export async function runNewSessionImportTask(
   root: string | null | undefined,
   req: NewSessionImportRequest
 ): Promise<NewSessionImportResult> {
-  const resumeWatcher = pauseArchiveWatcher()
   const handle = startTask({
     kind: 'import',
     title: `Importing to ${req.displayName}`,
@@ -144,15 +141,13 @@ export async function runNewSessionImportTask(
   handle.setItems(itemsFor(req.logs))
 
   try {
-    const res = await importToNewSession(adb, root, req, hooksFor(handle, req.logs))
+    const res = await importHubLogsToNewSessionCommand(adb, root, req, hooksFor(handle, req.logs))
     attachRetries(handle, req.logs, res.session.path)
     finish(handle, res.results, req.displayName, res.session.path)
     return res
   } catch (err) {
     handle.fail(err)
     throw err
-  } finally {
-    resumeWatcher()
   }
 }
 

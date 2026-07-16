@@ -61,6 +61,12 @@ export interface ArchiveChangedEvent {
   reason: 'archive_changed'
 }
 
+/** Main-to-renderer push channels and their payloads. */
+export interface IpcEvents {
+  'archive:changed': ArchiveChangedEvent
+  'tasks:update': Task
+}
+
 export interface IpcApi {
   /** Round-trip smoke test: renderer → main → renderer. */
   'app:ping': (msg: string) => Promise<string>

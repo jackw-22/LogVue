@@ -1,8 +1,8 @@
 import { basename } from 'path'
-import { BrowserWindow } from 'electron'
 import chokidar from 'chokidar'
 import type { FSWatcher } from 'chokidar'
 import type { ArchiveChangedEvent } from '@shared/types/ipc'
+import { emitIpcEvent } from '../../ipc/events'
 import { rebuild } from '../index/indexService'
 import { INDEX_FILE, INTERNAL_DIR, isTransientArtifact } from '../archive/paths'
 
@@ -110,7 +110,5 @@ function flush(state: WatcherState): void {
 /** Immediately tell renderers about a service-owned archive mutation. */
 export function notifyArchiveChanged(root: string, paths: string[]): void {
   const payload: ArchiveChangedEvent = { root, paths, reason: 'archive_changed' }
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('archive:changed', payload)
-  }
+  emitIpcEvent('archive:changed', payload)
 }

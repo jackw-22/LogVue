@@ -37,7 +37,7 @@ which defines *what* to build; this defines *how*.
 
 ## 2. Process model
 
-Electron's three contexts, with a hard security boundary:
+Electron's three contexts, plus MCP as a second trusted-process front door:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -54,18 +54,22 @@ Electron's three contexts, with a hard security boundary:
 └───────────────▲──────────────────────────────────────────────────┘
                 │  ipcMain.handle(channel, …)  ⇄  ipcRenderer.invoke
 ┌───────────────┴──────────────────────────────────────────────────┐
-│ MAIN  (Node.js — trusted)                                          │
-│   All privileged work lives here:                                  │
+│ MAIN FRONT DOORS  (Node.js — trusted)                              │
+│   Electron IPC registry                         MCP server          │
+│              └──────────────┬──────────────────────┘               │
+│                      shared commands                               │
+│         mutation → reindex/rebuild → typed renderer event          │
 │   – AdbClient (child_process)      – ArchiveService (fs)           │
 │   – IndexStore (better-sqlite3)    – FtcScoutClient (fetch)        │
-│   – ImportService (orchestration)  – Watcher (chokidar)            │
+│   – ImportService (disk mutation)  – Watcher (chokidar)            │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 Security posture: `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`.
 The renderer can never touch fs/adb directly — it asks main via the allow-listed
-bridge. This keeps us safe and makes the IPC surface the single source of truth for
-"what the app can do."
+bridge. IPC request/event contracts define that bridge; IPC and MCP mutations then
+share the same main-process command choreography instead of calling services in
+transport-specific sequences.
 
 ---
 
@@ -83,9 +87,13 @@ LogVue/
   src/
     main/                      # Node / trusted
       index.ts                 # app lifecycle, window creation
+      commands/
+        index.ts               # shared mutation → projection → notification choreography
       ipc/
-        registry.ts            # wires every channel → service method
-        channels.ts            # channel name constants
+        registry.ts            # typed IPC adapter over commands and read services
+        events.ts              # typed main → renderer event broadcaster
+      mcp/
+        server.ts              # MCP transport/tool adapter over commands + read services
       services/
         adb/
           AdbClient.ts         # device detection, ls/find discovery, pull
@@ -103,14 +111,15 @@ LogVue/
           rebuild.ts           # pure disk→rows projection + full rebuild
           indexService.ts      # owns the open store per archive root; cold-start/rebuild
         import/
-          ImportService.ts     # pull → copy → session.json → index (+ new-session batch)
+          ImportService.ts     # pull → copy → session.json (+ new-session batch)
+          importTask.ts        # activity-toast wrapper around import commands
           identity.ts          # duplicate detection (§14)
           fileKind.ts          # guess FileKind from filename (§6)
         ftcscout/
           FtcScoutClient.ts    # GraphQL queries
           syncEvent.ts         # merge remote matches → local sessions
         watcher/
-          Watcher.ts           # chokidar → incremental index updates
+          Watcher.ts           # chokidar → debounced full rebuild + archive notification
       config/
         settings.ts            # archive root, adb path, prefs (electron-store)
 
@@ -138,7 +147,7 @@ LogVue/
         session.ts             # Session, SessionMetadata, SessionFile
         hublog.ts              # HubLog, ImportStatus
         ftcscout.ts
-        ipc.ts                 # the IPC contract (request/response types)
+        ipc.ts                 # typed IPC request/response + push-event contracts
       constants/
         sessionTypes.ts        # §4.3
         fileKinds.ts           # §6
@@ -149,7 +158,8 @@ LogVue/
 ```
 
 `shared/` is the spine: types defined once, used by main (to validate) and
-renderer (to render). The IPC contract in `shared/types/ipc.ts` is the seam.
+renderer (to render). `IpcApi` and `IpcEvents` in `shared/types/ipc.ts` are the
+request and push-event seams; mutating front doors converge in `main/commands/`.
 
 ---
 
@@ -240,12 +250,12 @@ by never writing app-critical state *only* to sqlite.
 
 ## 5. IPC contract (`shared/types/ipc.ts`)
 
-One typed map of `channel → (request) => response`. `preload` exposes exactly
-these; `main/ipc/registry.ts` implements exactly these; the renderer's
-`api/` wraps them. Adding a capability = adding one entry here.
+`IpcApi` is one typed map of `channel → (request) => response`. `preload` exposes
+exactly these; `main/ipc/registry.ts` implements exactly these; the renderer's
+`api/` wraps them. Adding a request capability = adding one entry here.
 
 ```ts
-interface Api {
+interface IpcApi {
   // ── settings / archive root ──────────────────────────────
   'settings:get':            () => AppSettings;
   'settings:pickArchiveRoot':() => string | null;      // native dir dialog
@@ -263,9 +273,10 @@ interface Api {
   'archive:getSession':  (path: string) => Session;
   'archive:createSession':(input: CreateSessionInput) => Session;
   'archive:updateMeta':  (path: string, patch: Partial<SessionMetadata>) => Session;
+  'archive:deleteSession':(path: string) => DeleteSessionSummary;
+  'archive:promoteFolder':(path: string) => Session;
   'archive:readNotes':   (path: string) => string;
   'archive:writeNotes':  (path: string, md: string) => void;
-  'archive:discoverBare':() => BareFolder[];            // folders w/o session.json
   'archive:rebuildIndex':() => { sessions: number; files: number };
 
   // ── filter / search over the index (§12) ─────────────────
@@ -273,20 +284,47 @@ interface Api {
 
   // ── import ───────────────────────────────────────────────
   'import:toSession':    (req: ImportRequest) => ImportResult;   // append, not replace
-  'import:resolveConflict':(req: ConflictResolution) => ImportResult; // §14
-  'hublog:ignore':       (remote_path: string, ignored: boolean) => void;
+  'import:batchToSession':(req: BatchImportRequest) => ImportResult[];
+  'import:toNewSession': (req: NewSessionImportRequest) => NewSessionImportResult;
+  'adb:ignoreHubLog':    (entry: HubLogRef) => void;
 
   // ── FTCScout (online only) ───────────────────────────────
   'ftcscout:searchEvents':(q: { season: number; text: string }) => EventHit[];
   'ftcscout:syncEvent':   (req: SyncRequest) => SyncResult;   // merge, preserve local
 
-  // ── events pushed main → renderer (not request/response) ──
-  // 'adb:changed', 'index:changed', 'watcher:sessionChanged'
+}
+
+interface IpcEvents {
+  'archive:changed': ArchiveChangedEvent;
+  'tasks:update': Task;
 }
 ```
 
-Push events (device plugged/unplugged, watcher-detected folder change) go over a
-separate `main → renderer` emitter so the UI reacts live without polling.
+`IpcEvents` separately maps every main → renderer channel to its payload. Watcher
+and task broadcasts go through the single generic `ipc/events.ts` helper, so a
+channel and payload cannot drift independently. The preload deliberately exposes
+only two named subscriptions (`onArchiveChanged`, `onTaskUpdate`), not a raw or
+arbitrary `ipcRenderer` listener.
+
+### 5.1 Shared mutation commands
+
+`main/commands/` is the application boundary shared by the Electron IPC and MCP
+adapters. A command owns the whole domain sequence:
+
+```text
+service mutation → indexService.reindexSession (or full rebuild) → archive:changed
+```
+
+Create, metadata update, and promotion reindex one session. Delete preserves its
+full rebuild because descendant rows may disappear. Notes need no index write but
+still emit the typed archive event. Import commands pause watcher flushing across
+their multi-file work, perform one final reindex, and notify; their activity tasks
+remain presentation wrappers outside the command. Read-only handlers can call
+services directly.
+
+Chokidar will still observe app-owned writes and run its accepted debounced full
+rebuild about 400 ms later. Replacing that redundant rebuild with scoped reindexing
+is deliberately deferred to the next hardening item.
 
 ---
 
@@ -297,7 +335,8 @@ separate `main → renderer` emitter so the UI reacts live without polling.
 ```
 renderer: user clicks "Import latest" on Q4 Blue B2
   → api.import.toSession({ remote_path, sessionPath, kind })
-main ImportService.importToSession:
+IPC adapter → activity-task wrapper → shared importHubLogCommand
+  → ImportService.importToSession:
   1. identity check (§14): remote_path+filename+size vs index (skipped when force)
         └─ if match → return { status:'duplicate', existing } → renderer offers
            Cancel / Import another copy (force). [Link existing / Reassign: deferred]
@@ -305,15 +344,17 @@ main ImportService.importToSession:
      collisions get a _2 suffix — uniqueFilePath). A bare target folder is promoted
      to a session first, so an import always lands in something recognised.
   3. SessionStore: add SessionFile to session.json, bump updated_at
-  4. indexService.reindexSession: upsert the session row + replace its file rows,
+  4. command → indexService.reindexSession: upsert the session row + replace its file rows,
      so the hub-log status flips without a full rescan
-  5. return ImportResult → Query invalidates 'archive:tree' + 'archive:session' + 'adb:hubLogs'
+  5. command emits typed archive:changed; return ImportResult
+       → Query invalidates 'archive:tree' + 'archive:session' + 'adb:hubLogs'
 renderer: hub log row flips to "Imported → APOC26 / Q4 Blue B2"
 ```
 
 Never renames/deletes the remote file (spec §7.4, §22). Import **appends** (§4).
-`import:toNewSession` composes createSession + a forced import loop for the general
-"Create session from selected" workflow (§10). Ignored logs (§15) live in
+The MCP `import_hub_log` tool reaches the same command through the same activity
+wrapper. `import:toNewSession` composes createSession + a forced import loop for
+the general "Create session from selected" workflow (§10). Ignored logs (§15) live in
 `ignored_hublogs` (index-only) via `adb:ignoreHubLog`/`adb:unignoreHubLog`; the UI
 hides them behind a "Show ignored" toggle.
 
@@ -323,8 +364,9 @@ hides them behind a "Show ignored" toggle.
 app boot → settings.archiveRoot
   → if .logvue/index.sqlite missing OR schema out of date → rebuild.ts scans every folder,
      parses session.json (zod; discovery defaults for bare folders) → populates index
-  → Watcher (chokidar) starts on archiveRoot for incremental updates
-  → renderer requests archive:tree (served from index, fast)
+  → Watcher (chokidar) starts; a debounced change currently triggers a full rebuild
+     and typed archive:changed event (scoped reindex is the next hardening item)
+  → renderer requests archive:tree from disk; filter/search queries use the index
 ```
 
 ### 6.3 FTCScout sync (spec §8.3 — merge, never clobber)
@@ -411,8 +453,10 @@ parametrised WHERE body; `IndexStore.querySessions`/`facets` execute it and the
 whole-archive facet counts. `session_tags` and `file_metadata` are *derived* tables
 (rebuilt from disk alongside `sessions`/`files`) — a stale `INDEX_SCHEMA_VERSION`
 drops and repopulates the derived tables on next open (§6.2). Metadata edits
-(`updateMeta`/`createSession`/`promoteFolder`) reindex the single touched session so
-filters stay in step without a full rescan.
+(`updateMeta`/`createSession`/`promoteFolder`) flow through shared commands that
+reindex the single touched session and emit `archive:changed`, so filters and every
+renderer stay in step without a full rescan. Session deletion is the exception: its
+command performs a full rebuild because an entire descendant subtree may vanish.
 
 `file_metadata` holds the key/value map PsiKit's `Logger.recordMetadata()` embeds in
 each `.rlog` (`/Metadata/*` string records in the first log cycle — e.g. GitSHA,
